@@ -8,11 +8,13 @@ $ ./thono
 ```
 
 ## Usage
-|Action|Description|
-|------|-----------|
-|`q`|Quit|
-|`j` or Scroll Up|Zoom in|
-|`k` or Scroll Down|Zoom out|
+| Action      | Description   |
+| ----------- | ------------- |
+| `q`         | Quit          |
+| `s`         | Screenshot    |
+| Scroll Up   | Zoom in       |
+| Scroll Down | Zoom out      |
+| Mouse Drag  | Drag the zoom |
 
 ## Dependencies
 - [Xlib](https://www.x.org/releases/current/doc/libX11/libX11/libX11.html)

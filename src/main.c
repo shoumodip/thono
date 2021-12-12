@@ -69,22 +69,54 @@ XImage *snap_screen(Display *display, Window root)
     return XGetImage(display, root, 0, 0, attr.width, attr.height, AllPlanes, ZPixmap);
 }
 
+typedef struct {
+    int x, y;
+} Vec2D;
+
+Vec2D vec2d(int x, int y)
+{
+    return (Vec2D) {.x = x, .y = y};
+}
+
+Vec2D vec2d_add(Vec2D a, Vec2D b)
+{
+    return (Vec2D) {.x = a.x + b.x, .y = a.y + b.y};
+}
+
+Vec2D vec2d_sub(Vec2D a, Vec2D b)
+{
+    return (Vec2D) {.x = a.x - b.x, .y = a.y - b.y};
+}
+
+Vec2D vec2d_div(Vec2D a, Vec2D b)
+{
+    return (Vec2D) {.x = a.x / b.x, .y = a.y / b.y};
+}
+
+typedef struct {
+    XTransform transform;
+    Vec2D pos;
+    double zoom;
+} View;
+
 void render_pixmap(Display *display,
         size_t width,
         size_t height,
         Picture pixmap_picture,
         Picture window_picture,
-        XTransform *transform,
-        double scroll_factor)
+        Picture buffer_picture,
+        View *view)
 {
-    transform->matrix[2][2] = XDoubleToFixed(scroll_factor);
+    view->transform.matrix[2][2] = XDoubleToFixed(view->zoom);
+    XRenderSetPictureTransform(display, pixmap_picture, &view->transform);
 
-    XRenderSetPictureTransform(display, pixmap_picture, transform);
+    if (view->pos.x != 0 || view->pos.y != 0) {
+        XRenderColor back = {0};
+        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &back, 0, 0, width, height);
+    }
 
-    XRenderComposite(display, PictOpSrc,
-            pixmap_picture, 0,
-            window_picture, 0, 0, 0, 0, 0, 0,
-            width, height);
+    XRenderComposite(display, PictOpOver, pixmap_picture, 0, buffer_picture, 0, 0, 0, 0, view->pos.x, view->pos.y, width, height);
+    XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
 }
 
 void save_screen(Display *display, Window root, size_t *image_count)
@@ -109,13 +141,18 @@ int main(void)
             PropModeReplace, (unsigned char *) &wm_fullscreen, 1);
 
     XMapWindow(display, window);
-    XSelectInput(display, window, ButtonPressMask | KeyPressMask | ExposureMask);
+    XSelectInput(display, window,
+            ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | KeyPressMask | ExposureMask);
 
     Pixmap pixmap = XCreatePixmap(display, window, snap->width, snap->height, snap->depth);
     XPutImage(display, pixmap, DefaultGC(display, 0), snap, 0, 0, 0, 0, snap->width, snap->height);
 
     XRenderPictureAttributes picture_attr = {0};
     XRenderPictFormat *picture_format = XRenderFindStandardFormat(display, PictStandardRGB24);
+
+    Pixmap buffer = XCreatePixmap(display, window, snap->width, snap->height, snap->depth);
+    Picture buffer_picture = XRenderCreatePicture(display, buffer, picture_format, 0, &picture_attr);
+
     Picture pixmap_picture = XRenderCreatePicture(display, pixmap, picture_format, 0, &picture_attr);
     Picture window_picture = XRenderCreatePicture(display, window, picture_format, 0, &picture_attr);
 
@@ -125,32 +162,33 @@ int main(void)
     const double x_scale = snap->width / window_attr.width;
     const double y_scale = snap->height / window_attr.height;
 
-    XTransform transform = {0};
+    View view = {0};
 
-    transform.matrix[0][0] = XDoubleToFixed(x_scale);
-    transform.matrix[1][1] = XDoubleToFixed(y_scale);
+    view.transform.matrix[0][0] = XDoubleToFixed(x_scale);
+    view.transform.matrix[1][1] = XDoubleToFixed(y_scale);
+    view.zoom = 1.0;
 
-    double scroll_factor = 1.0;
-    bool scroll_changed = true;
+    bool view_changed = true;
+    bool mouse_left_down = false;
+    Vec2D mouse_drag_start = {0};
+    Vec2D view_pos_start = {0};
 
     XEvent event;
     bool running = true;
+
     size_t image_count = 0;
     while (running) {
+        if (view_changed) {
+            render_pixmap(display, window_attr.width, window_attr.height, pixmap_picture, window_picture, buffer_picture, &view);
+            view_changed = false;
+        }
+
         XNextEvent(display, &event);
 
         if (event.type == KeyPress) {
             switch (XLookupKeysym(&event.xkey, 0)) {
                 case 'q':
                     running = false;
-                    break;
-                case 'j':
-                    scroll_factor += 0.05;
-                    scroll_changed = true;
-                    break;
-                case 'k':
-                    scroll_factor -= 0.05;
-                    scroll_changed = true;
                     break;
                 case 's':
                     save_screen(display, root, &image_count);
@@ -159,27 +197,43 @@ int main(void)
         } else if (event.type == ButtonPress) {
             switch (event.xbutton.button) {
                 case Button4:
-                    scroll_factor += 0.05;
-                    scroll_changed = true;
+                    view.zoom += 0.05;
+                    view_changed = true;
                     break;
 
                 case Button5:
-                    scroll_factor -= 0.05;
-                    scroll_changed = true;
+                    view.zoom -= 0.05;
+                    view_changed = true;
+                    break;
+
+                case Button1:
+                    mouse_drag_start = vec2d(event.xbutton.x, event.xbutton.y);
+                    view_pos_start = view.pos;
+                    mouse_left_down = true;
                     break;
             }
-
-        }
-
-        if (scroll_changed) {
-            render_pixmap(display, window_attr.width, window_attr.height, pixmap_picture, window_picture, &transform, scroll_factor);
-            scroll_changed = false;
+        } else if (event.type == ButtonRelease) {
+            switch (event.xbutton.button) {
+                case Button1:
+                    mouse_left_down = false;
+                    break;
+            }
+        } else if (event.type == MotionNotify) {
+            if (mouse_left_down) {
+                Vec2D dm = vec2d_sub(vec2d(event.xmotion.x, event.xmotion.y), mouse_drag_start);
+                view.pos = vec2d_add(view_pos_start, dm);
+                view_changed = true;
+            }
         }
     }
 
-    XRenderFreePicture(display, window_picture);
     XRenderFreePicture(display, pixmap_picture);
+    XRenderFreePicture(display, buffer_picture);
+    XRenderFreePicture(display, window_picture);
+
     XFreePixmap(display, pixmap);
+    XFreePixmap(display, buffer);
+
     XDestroyImage(snap);
     XCloseDisplay(display);
     return 0;
