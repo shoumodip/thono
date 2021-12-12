@@ -7,6 +7,13 @@ $ make
 $ ./thono
 ```
 
+## Usage
+|Action|Description|
+|------|-----------|
+|`q`|Quit|
+|`j` or Scroll Up|Zoom in|
+|`k` or Scroll Down|Zoom out|
+
 ## Dependencies
 - [Xlib](https://www.x.org/releases/current/doc/libX11/libX11/libX11.html)
 - [XRender](https://www.x.org/releases/X11R7.7/doc/libXrender/libXrender.txt)
