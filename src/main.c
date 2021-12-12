@@ -12,11 +12,16 @@
 #include <X11/Xatom.h>
 #include <X11/extensions/Xrender.h>
 
-// TODO: save_image() does not respect the transformation matrix
-void save_image(XImage *image, const char *file_path)
+#define SHOT_PATH_FMT "shot-%zu.jpeg"
+
+void save_image(XImage *image, size_t *image_count)
 {
+    const size_t length = snprintf(NULL, 0, SHOT_PATH_FMT, *image_count) + 1;
+    char file_path[length];
+    snprintf(file_path, length, SHOT_PATH_FMT, *image_count);
+
     FILE* f = fopen(file_path, "wb");
-    assert(f);
+    if (f == NULL) return;
 
     char *buffer = malloc(3 * image->width * image->height);
     for (int y = 0; y < image->height; y++) {
@@ -53,6 +58,8 @@ void save_image(XImage *image, const char *file_path)
     free(buffer);
     jpeg_finish_compress(&cinfo);
     fclose(f);
+
+    *image_count += 1;
 }
 
 XImage *snap_screen(Display *display, Window root)
@@ -78,6 +85,13 @@ void render_pixmap(Display *display,
             pixmap_picture, 0,
             window_picture, 0, 0, 0, 0, 0, 0,
             width, height);
+}
+
+void save_screen(Display *display, Window root, size_t *image_count)
+{
+    XImage *current = snap_screen(display, root);
+    save_image(current, image_count);
+    XDestroyImage(current);
 }
 
 int main(void)
@@ -121,6 +135,7 @@ int main(void)
 
     XEvent event;
     bool running = true;
+    size_t image_count = 0;
     while (running) {
         XNextEvent(display, &event);
 
@@ -138,7 +153,7 @@ int main(void)
                     scroll_changed = true;
                     break;
                 case 's':
-                    save_image(snap, "output.jpeg");
+                    save_screen(display, root, &image_count);
                     break;
             }
         } else if (event.type == ButtonPress) {
