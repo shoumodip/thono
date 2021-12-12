@@ -2,11 +2,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#include <assert.h>
 #include <unistd.h>
-
 #include <jpeglib.h>
-
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
@@ -115,7 +112,7 @@ void render_pixmap(Display *display,
         XRenderFillRectangle(display, PictOpSrc, buffer_picture, &back, 0, 0, width, height);
     }
 
-    XRenderComposite(display, PictOpOver, pixmap_picture, 0, buffer_picture, 0, 0, 0, 0, view->pos.x, view->pos.y, width, height);
+    XRenderComposite(display, PictOpOver, pixmap_picture, 0, buffer_picture, 0, 0, 0, 0, view->pos.x, view->pos.y, width - view->pos.x, height - view->pos.y);
     XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
 }
 
@@ -142,7 +139,7 @@ int main(void)
 
     XMapWindow(display, window);
     XSelectInput(display, window,
-            ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | KeyPressMask | ExposureMask);
+            ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | KeyPressMask);
 
     Pixmap pixmap = XCreatePixmap(display, window, snap->width, snap->height, snap->depth);
     XPutImage(display, pixmap, DefaultGC(display, 0), snap, 0, 0, 0, 0, snap->width, snap->height);
