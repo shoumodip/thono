@@ -10,6 +10,7 @@
 #include <X11/extensions/Xrender.h>
 
 #define SHOT_PATH_FMT "shot-%zu.jpeg"
+#define ZOOM_FACTOR 0.1
 
 void save_image(XImage *image, size_t *image_count)
 {
@@ -92,8 +93,10 @@ Vec2D vec2d_div(Vec2D a, Vec2D b)
 
 typedef struct {
     XTransform transform;
-    Vec2D pos;
+    Vec2D move_offset;
+
     double zoom;
+    Vec2D zoom_offset;
 } View;
 
 void render_pixmap(Display *display,
@@ -107,12 +110,13 @@ void render_pixmap(Display *display,
     view->transform.matrix[2][2] = XDoubleToFixed(view->zoom);
     XRenderSetPictureTransform(display, pixmap_picture, &view->transform);
 
-    if (view->pos.x != 0 || view->pos.y != 0) {
+    Vec2D offset = vec2d_add(view->move_offset, view->zoom_offset);
+    if (offset.x != 0 || offset.y != 0) {
         XRenderColor back = {0};
         XRenderFillRectangle(display, PictOpSrc, buffer_picture, &back, 0, 0, width, height);
     }
 
-    XRenderComposite(display, PictOpOver, pixmap_picture, 0, buffer_picture, 0, 0, 0, 0, view->pos.x, view->pos.y, width - view->pos.x, height - view->pos.y);
+    XRenderComposite(display, PictOpOver, pixmap_picture, 0, buffer_picture, 0, 0, 0, 0, offset.x, offset.y, width - offset.x, height - offset.y);
     XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
 }
 
@@ -168,7 +172,7 @@ int main(void)
     bool view_changed = true;
     bool mouse_left_down = false;
     Vec2D mouse_drag_start = {0};
-    Vec2D view_pos_start = {0};
+    Vec2D view_move_start = {0};
 
     XEvent event;
     bool running = true;
@@ -182,45 +186,57 @@ int main(void)
 
         XNextEvent(display, &event);
 
-        if (event.type == KeyPress) {
-            switch (XLookupKeysym(&event.xkey, 0)) {
-                case 'q':
-                    running = false;
-                    break;
-                case 's':
-                    save_screen(display, root, &image_count);
-                    break;
-            }
-        } else if (event.type == ButtonPress) {
-            switch (event.xbutton.button) {
-                case Button4:
-                    view.zoom += 0.05;
-                    view_changed = true;
-                    break;
+        switch (event.type) {
+            case KeyPress:
+                switch (XLookupKeysym(&event.xkey, 0)) {
+                    case 'q':
+                        running = false;
+                        break;
+                    case 's':
+                        save_screen(display, root, &image_count);
+                        break;
+                }
+                break;
 
-                case Button5:
-                    view.zoom -= 0.05;
-                    view_changed = true;
-                    break;
+            case ButtonPress:
+                switch (event.xbutton.button) {
+                    case Button1:
+                        mouse_drag_start = vec2d(event.xbutton.x, event.xbutton.y);
+                        view_move_start = view.move_offset;
+                        mouse_left_down = true;
+                        break;
 
-                case Button1:
-                    mouse_drag_start = vec2d(event.xbutton.x, event.xbutton.y);
-                    view_pos_start = view.pos;
-                    mouse_left_down = true;
-                    break;
-            }
-        } else if (event.type == ButtonRelease) {
-            switch (event.xbutton.button) {
-                case Button1:
-                    mouse_left_down = false;
-                    break;
-            }
-        } else if (event.type == MotionNotify) {
-            if (mouse_left_down) {
-                Vec2D dm = vec2d_sub(vec2d(event.xmotion.x, event.xmotion.y), mouse_drag_start);
-                view.pos = vec2d_add(view_pos_start, dm);
-                view_changed = true;
-            }
+                    case Button4:
+                        view.zoom += ZOOM_FACTOR;
+                        view.zoom_offset.x -= (event.xbutton.x - view.move_offset.x) * ZOOM_FACTOR;
+                        view.zoom_offset.y -= (event.xbutton.y - view.move_offset.y) * ZOOM_FACTOR;
+                        view_changed = true;
+                        break;
+
+                    case Button5:
+                        view.zoom -= ZOOM_FACTOR;
+                        view.zoom_offset.x += (event.xbutton.x - view.move_offset.x) * ZOOM_FACTOR;
+                        view.zoom_offset.y += (event.xbutton.y - view.move_offset.y) * ZOOM_FACTOR;
+                        view_changed = true;
+                        break;
+                }
+                break;
+            case ButtonRelease:
+                switch (event.xbutton.button) {
+                    case Button1:
+                        view_move_start = view.move_offset;
+                        mouse_left_down = false;
+                        break;
+                }
+                break;
+
+            case MotionNotify:
+                if (mouse_left_down) {
+                    Vec2D dm = vec2d_sub(vec2d(event.xmotion.x, event.xmotion.y), mouse_drag_start);
+                    view.move_offset = vec2d_add(view_move_start, dm);
+                    view_changed = true;
+                }
+                break;
         }
     }
 
