@@ -18,6 +18,43 @@ $ ./thono
 | Scroll Down      | Zoom out (If in Lens Mode, decrease the lens size) |
 | Left Click Drag  | Drag the zoom view                                 |
 
+## Command Line Usage
+```console
+$ ./thono [FLAGS]
+```
+
+### `-zoom N`
+Set the magnification zoom factor to N.
+
+- Default: `0.1`
+
+```console
+$ ./thono -zoom 0.2
+```
+
+### `-lens-zoom N`
+Set the lens size zoom factor to N.
+
+- Default: `50`
+
+```console
+$ ./thono -lens-zoom 69
+```
+
+### `-help`
+Display the usage information.
+
+```console
+$ ./thono -help
+```
+
+### `-help-ui`
+Display help message about the UI.
+
+```console
+$ ./thono -help-ui
+```
+
 ## Dependencies
 - [Xlib](https://www.x.org/releases/current/doc/libX11/libX11/libX11.html)
 - [XRender](https://www.x.org/releases/X11R7.7/doc/libXrender/libXrender.txt)

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 
 #include <unistd.h>
@@ -10,8 +11,6 @@
 #include <X11/extensions/Xrender.h>
 
 #define SHOT_PATH_FMT "shot-%zu.jpeg"
-#define ZOOM_FACTOR 0.1
-#define LENS_ZOOM_FACTOR 10
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -178,8 +177,78 @@ void save_screen(Display *display, Window root, size_t *image_count)
     XDestroyImage(current);
 }
 
-int main(void)
+void usage(FILE *stream)
 {
+    fprintf(stream, "USAGE:\n");
+    fprintf(stream, "  thono [FLAGS]\n");
+    fprintf(stream, "FLAGS:\n");
+    fprintf(stream, "  -help         Display this help message\n");
+    fprintf(stream, "  -help-ui      Display help message about the UI\n");
+    fprintf(stream, "  -zoom N       Set the magnification zoom factor to N (Default: 0.1)\n");
+    fprintf(stream, "  -lens-zoom N  Set the lens size zoom factor to N (Default: 50)\n");
+}
+
+int main(int argc, char **argv)
+{
+    double zoom_factor = 0.1;
+    size_t lens_zoom_factor = 50;
+
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-zoom") == 0) {
+            i++;
+
+            if (i == argc) {
+                usage(stderr);
+                fprintf(stderr, "ERROR: zoom factor not provided\n");
+                exit(1);
+            }
+
+            char *endp = NULL;
+            zoom_factor = strtod(argv[i], &endp);
+
+            if (endp != argv[i] + strlen(argv[i])) {
+                usage(stderr);
+                fprintf(stderr, "ERROR: invalid zoom factor `%s`. Expected number\n", argv[i]);
+                exit(1);
+            }
+        } else if (strcmp(argv[i], "-lens-zoom") == 0) {
+            i++;
+
+            if (i == argc) {
+                usage(stderr);
+                fprintf(stderr, "ERROR: lens zoom factor not provided\n");
+                exit(1);
+            }
+
+            char *endp = NULL;
+            lens_zoom_factor = strtoul(argv[i], &endp, 10);
+
+            if (endp != argv[i] + strlen(argv[i])) {
+                usage(stderr);
+                fprintf(stderr, "ERROR: invalid lens zoom factor `%s`. Expected integer\n", argv[i]);
+                exit(1);
+            }
+        } else if (strcmp(argv[i], "-help") == 0) {
+            usage(stdout);
+            exit(0);
+        } else if (strcmp(argv[i], "-help-ui") == 0) {
+            printf("Action           Description\n");
+            printf("----------------------------\n");
+            printf("`q`              Quit\n");
+            printf("`s`              Screenshot\n");
+            printf("`s`              Screenshot\n");
+            printf("Right Click      Toggle Lens Mode\n");
+            printf("Scroll Up        Zoom in (If in Lens Mode, increase the lens size) \n");
+            printf("Scroll Down      Zoom out (If in Lens Mode, decrease the lens size)\n");
+            printf("Left Click Drag  Drag the zoom view\n");
+            exit(0);
+        } else {
+            usage(stderr);
+            fprintf(stderr, "ERROR: unknown flag `%s`\n", argv[i]);
+            exit(1);
+        }
+    }
+
     Display *display = XOpenDisplay(NULL);
     Window root = RootWindow(display, DefaultScreen(display));
     XImage *snap = snap_screen(display, root);
@@ -258,22 +327,22 @@ int main(void)
 
                         case Button4:
                             if (view.lens_mode) {
-                                view.lens_size += LENS_ZOOM_FACTOR;
+                                view.lens_size += lens_zoom_factor;
                             } else {
-                                view.zoom += ZOOM_FACTOR;
-                                view.zoom_offset.x -= (event.xbutton.x - view.move_offset.x) * ZOOM_FACTOR;
-                                view.zoom_offset.y -= (event.xbutton.y - view.move_offset.y) * ZOOM_FACTOR;
+                                view.zoom += zoom_factor;
+                                view.zoom_offset.x -= (event.xbutton.x - view.move_offset.x) * zoom_factor;
+                                view.zoom_offset.y -= (event.xbutton.y - view.move_offset.y) * zoom_factor;
                             }
                             view_changed = true;
                             break;
 
                         case Button5:
                             if (view.lens_mode) {
-                                view.lens_size -= LENS_ZOOM_FACTOR;
+                                view.lens_size -= lens_zoom_factor;
                             } else {
-                                view.zoom -= ZOOM_FACTOR;
-                                view.zoom_offset.x += (event.xbutton.x - view.move_offset.x) * ZOOM_FACTOR;
-                                view.zoom_offset.y += (event.xbutton.y - view.move_offset.y) * ZOOM_FACTOR;
+                                view.zoom -= zoom_factor;
+                                view.zoom_offset.x += (event.xbutton.x - view.move_offset.x) * zoom_factor;
+                                view.zoom_offset.y += (event.xbutton.y - view.move_offset.y) * zoom_factor;
                             }
                             view_changed = true;
                             break;
