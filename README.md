@@ -8,13 +8,15 @@ $ ./thono
 ```
 
 ## Usage
-| Action      | Description   |
-| ----------- | ------------- |
-| `q`         | Quit          |
-| `s`         | Screenshot    |
-| Scroll Up   | Zoom in       |
-| Scroll Down | Zoom out      |
-| Mouse Drag  | Drag the zoom |
+| Action           | Description                                        |
+| ---------------- | -------------------------------------------------- |
+| `q`              | Quit                                               |
+| `s`              | Screenshot                                         |
+| `s`              | Screenshot                                         |
+| Right Click      | Toggle Lens Mode                                   |
+| Scroll Up        | Zoom in (If in Lens Mode, increase the lens size)  |
+| Scroll Down      | Zoom out (If in Lens Mode, decrease the lens size) |
+| Left Click Drag  | Drag the zoom view                                 |
 
 ## Dependencies
 - [Xlib](https://www.x.org/releases/current/doc/libX11/libX11/libX11.html)

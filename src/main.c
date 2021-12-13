@@ -11,6 +11,9 @@
 
 #define SHOT_PATH_FMT "shot-%zu.jpeg"
 #define ZOOM_FACTOR 0.1
+#define LENS_ZOOM_FACTOR 10
+
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
 void save_image(XImage *image, size_t *image_count)
 {
@@ -97,6 +100,11 @@ typedef struct {
 
     double zoom;
     Vec2D zoom_offset;
+
+    bool lens_mode;
+    size_t lens_size;
+
+    Vec2D mouse;
 } View;
 
 void render_pixmap(Display *display,
@@ -117,6 +125,49 @@ void render_pixmap(Display *display,
     }
 
     XRenderComposite(display, PictOpOver, pixmap_picture, 0, buffer_picture, 0, 0, 0, 0, offset.x, offset.y, width - offset.x, height - offset.y);
+
+    if (view->lens_mode) {
+        XRenderColor focus = {0};
+
+        Vec2D start = {
+            .x = view->mouse.x - view->lens_size,
+            .y = view->mouse.y - view->lens_size
+        };
+
+        Vec2D end = {
+            .x = view->mouse.x + view->lens_size,
+            .y = view->mouse.y + view->lens_size
+        };
+
+        start.x = MAX(start.x, 0);
+        start.y = MAX(start.y, 0);
+
+        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+                0, 0, start.x, height);
+
+        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+                end.x, 0, width - start.x, height);
+
+        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+                start.x, 0, end.x, start.y);
+
+        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+                start.x, end.y, end.x, height - start.y);
+
+        for (int y = start.y; y < end.y; ++y) {
+            for (int x = start.x; x < end.x; ++x) {
+                const int dx = x - view->mouse.x;
+                const int dy = y - view->mouse.y;
+                const size_t length = dx * dx + dy * dy;
+
+                if (length > view->lens_size * view->lens_size) {
+                    XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+                            x, y, 1, 1);
+                }
+            }
+        }
+    }
+
     XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
 }
 
@@ -143,7 +194,7 @@ int main(void)
 
     XMapWindow(display, window);
     XSelectInput(display, window,
-            ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | KeyPressMask);
+            ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | PointerMotionMask | KeyPressMask);
 
     Pixmap pixmap = XCreatePixmap(display, window, snap->width, snap->height, snap->depth);
     XPutImage(display, pixmap, DefaultGC(display, 0), snap, 0, 0, 0, 0, snap->width, snap->height);
@@ -160,13 +211,11 @@ int main(void)
     XWindowAttributes window_attr = {0};
     XGetWindowAttributes(display, window, &window_attr);
 
-    const double x_scale = snap->width / window_attr.width;
-    const double y_scale = snap->height / window_attr.height;
-
     View view = {0};
+    view.lens_size = 50;
 
-    view.transform.matrix[0][0] = XDoubleToFixed(x_scale);
-    view.transform.matrix[1][1] = XDoubleToFixed(y_scale);
+    view.transform.matrix[0][0] = XDoubleToFixed(snap->width / window_attr.width);
+    view.transform.matrix[1][1] = XDoubleToFixed(snap->height / window_attr.height);
     view.zoom = 1.0;
 
     bool view_changed = true;
@@ -184,59 +233,85 @@ int main(void)
             view_changed = false;
         }
 
-        XNextEvent(display, &event);
+        while (XPending(display) > 0) {
+            XNextEvent(display, &event);
 
-        switch (event.type) {
-            case KeyPress:
-                switch (XLookupKeysym(&event.xkey, 0)) {
-                    case 'q':
-                        running = false;
-                        break;
-                    case 's':
-                        save_screen(display, root, &image_count);
-                        break;
-                }
-                break;
+            switch (event.type) {
+                case KeyPress:
+                    switch (XLookupKeysym(&event.xkey, 0)) {
+                        case 'q':
+                            running = false;
+                            break;
+                        case 's':
+                            save_screen(display, root, &image_count);
+                            break;
+                    }
+                    break;
 
-            case ButtonPress:
-                switch (event.xbutton.button) {
-                    case Button1:
-                        mouse_drag_start = vec2d(event.xbutton.x, event.xbutton.y);
-                        view_move_start = view.move_offset;
-                        mouse_left_down = true;
-                        break;
+                case ButtonPress:
+                    switch (event.xbutton.button) {
+                        case Button1:
+                            mouse_drag_start = vec2d(event.xbutton.x, event.xbutton.y);
+                            view_move_start = view.move_offset;
+                            mouse_left_down = true;
+                            break;
 
-                    case Button4:
-                        view.zoom += ZOOM_FACTOR;
-                        view.zoom_offset.x -= (event.xbutton.x - view.move_offset.x) * ZOOM_FACTOR;
-                        view.zoom_offset.y -= (event.xbutton.y - view.move_offset.y) * ZOOM_FACTOR;
+                        case Button4:
+                            if (view.lens_mode) {
+                                view.lens_size += LENS_ZOOM_FACTOR;
+                            } else {
+                                view.zoom += ZOOM_FACTOR;
+                                view.zoom_offset.x -= (event.xbutton.x - view.move_offset.x) * ZOOM_FACTOR;
+                                view.zoom_offset.y -= (event.xbutton.y - view.move_offset.y) * ZOOM_FACTOR;
+                            }
+                            view_changed = true;
+                            break;
+
+                        case Button5:
+                            if (view.lens_mode) {
+                                view.lens_size -= LENS_ZOOM_FACTOR;
+                            } else {
+                                view.zoom -= ZOOM_FACTOR;
+                                view.zoom_offset.x += (event.xbutton.x - view.move_offset.x) * ZOOM_FACTOR;
+                                view.zoom_offset.y += (event.xbutton.y - view.move_offset.y) * ZOOM_FACTOR;
+                            }
+                            view_changed = true;
+                            break;
+                    }
+                    break;
+
+                case ButtonRelease:
+                    switch (event.xbutton.button) {
+                        case Button1:
+                            view_move_start = view.move_offset;
+                            mouse_left_down = false;
+                            break;
+
+                        case Button3:
+                            view.mouse.x = event.xmotion.x;
+                            view.mouse.y = event.xmotion.y;
+
+                            view.lens_mode = !view.lens_mode;
+                            view_changed = true;
+                            break;
+                    }
+                    break;
+
+                case MotionNotify:
+                    view.mouse.x = event.xmotion.x;
+                    view.mouse.y = event.xmotion.y;
+
+                    if (mouse_left_down) {
+                        Vec2D dm = vec2d_sub(view.mouse, mouse_drag_start);
+                        view.move_offset = vec2d_add(view_move_start, dm);
                         view_changed = true;
-                        break;
+                    }
 
-                    case Button5:
-                        view.zoom -= ZOOM_FACTOR;
-                        view.zoom_offset.x += (event.xbutton.x - view.move_offset.x) * ZOOM_FACTOR;
-                        view.zoom_offset.y += (event.xbutton.y - view.move_offset.y) * ZOOM_FACTOR;
+                    if (view.lens_mode) {
                         view_changed = true;
-                        break;
-                }
-                break;
-            case ButtonRelease:
-                switch (event.xbutton.button) {
-                    case Button1:
-                        view_move_start = view.move_offset;
-                        mouse_left_down = false;
-                        break;
-                }
-                break;
-
-            case MotionNotify:
-                if (mouse_left_down) {
-                    Vec2D dm = vec2d_sub(vec2d(event.xmotion.x, event.xmotion.y), mouse_drag_start);
-                    view.move_offset = vec2d_add(view_move_start, dm);
-                    view_changed = true;
-                }
-                break;
+                    }
+                    break;
+            }
         }
     }
 
