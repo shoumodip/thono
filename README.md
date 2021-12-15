@@ -2,9 +2,11 @@
 Zoomer in C.
 
 ## Quick Start
+This project uses [make.h](https://github.com/shoumodip/make.h)
+
 ```console
-$ make
-$ ./thono
+$ cc -o make make.c
+$ ./make run
 ```
 
 ## Usage
