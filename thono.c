@@ -123,10 +123,11 @@ void render_pixmap(Display *display,
         XRenderFillRectangle(display, PictOpSrc, buffer_picture, &back, 0, 0, width, height);
     }
 
-    XRenderComposite(display, PictOpOver, pixmap_picture, 0, buffer_picture, 0, 0, 0, 0, offset.x, offset.y, width - offset.x, height - offset.y);
+    XRenderComposite(display, PictOpSrc, pixmap_picture, 0, buffer_picture, 0, 0, 0, 0, offset.x, offset.y, width - offset.x, height - offset.y);
 
     if (view->lens_mode) {
         XRenderColor focus = {0};
+        focus.alpha = 55000;
 
         Vec2D start = {
             .x = view->mouse.x - view->lens_size,
@@ -141,16 +142,16 @@ void render_pixmap(Display *display,
         start.x = MAX(start.x, 0);
         start.y = MAX(start.y, 0);
 
-        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+        XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
                 0, 0, start.x, height);
 
-        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+        XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
                 end.x, 0, width - start.x, height);
 
-        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+        XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
                 start.x, 0, end.x, start.y);
 
-        XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+        XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
                 start.x, end.y, end.x, height - start.y);
 
         for (int y = start.y; y < end.y; ++y) {
@@ -160,7 +161,7 @@ void render_pixmap(Display *display,
                 const size_t length = dx * dx + dy * dy;
 
                 if (length > view->lens_size * view->lens_size) {
-                    XRenderFillRectangle(display, PictOpSrc, buffer_picture, &focus,
+                    XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
                             x, y, 1, 1);
                 }
             }
