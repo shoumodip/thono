@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdbool.h>
 
+#include <time.h>
 #include <unistd.h>
 #include <jpeglib.h>
 #include <X11/Xlib.h>
@@ -14,11 +16,13 @@
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-void save_image(XImage *image, size_t *image_count)
+void save_image(XImage *image)
 {
-    const size_t length = snprintf(NULL, 0, SHOT_PATH_FMT, *image_count) + 1;
+    const time_t instant = time(NULL);
+
+    const size_t length = snprintf(NULL, 0, SHOT_PATH_FMT, instant) + 1;
     char file_path[length];
-    snprintf(file_path, length, SHOT_PATH_FMT, *image_count);
+    snprintf(file_path, length, SHOT_PATH_FMT, instant);
 
     FILE* f = fopen(file_path, "wb");
     if (f == NULL) return;
@@ -58,8 +62,6 @@ void save_image(XImage *image, size_t *image_count)
     free(buffer);
     jpeg_finish_compress(&cinfo);
     fclose(f);
-
-    *image_count += 1;
 }
 
 XImage *snap_screen(Display *display, Window root)
@@ -102,6 +104,7 @@ typedef struct {
 
     bool lens_mode;
     size_t lens_size;
+    double lens_opacity;
 
     Vec2D mouse;
 } View;
@@ -127,7 +130,7 @@ void render_pixmap(Display *display,
 
     if (view->lens_mode) {
         XRenderColor focus = {0};
-        focus.alpha = 55000;
+        focus.alpha = UINT16_MAX * view->lens_opacity;
 
         Vec2D start = {
             .x = view->mouse.x - view->lens_size,
@@ -171,28 +174,32 @@ void render_pixmap(Display *display,
     XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
 }
 
-void save_screen(Display *display, Window root, size_t *image_count)
+void save_screen(Display *display, Window root)
 {
     XImage *current = snap_screen(display, root);
-    save_image(current, image_count);
+    save_image(current);
     XDestroyImage(current);
 }
 
 void usage(FILE *stream)
 {
-    fprintf(stream, "USAGE:\n");
+    fprintf(stream, "Usage:\n");
     fprintf(stream, "  thono [FLAGS]\n");
-    fprintf(stream, "FLAGS:\n");
-    fprintf(stream, "  -help         Display this help message\n");
-    fprintf(stream, "  -help-ui      Display help message about the UI\n");
-    fprintf(stream, "  -zoom N       Set the magnification zoom factor to N (Default: 0.1)\n");
-    fprintf(stream, "  -lens-zoom N  Set the lens size zoom factor to N (Default: 50)\n");
+    fprintf(stream, "Flags:\n");
+    fprintf(stream, "  -help            Display this help message\n");
+    fprintf(stream, "  -help-ui         Display help message about the UI\n");
+    fprintf(stream, "  -zoom N          Set the magnification zoom factor to N (Default: 0.1)\n");
+    fprintf(stream, "  -lens-zoom N     Set the lens size zoom factor to N (Default: 25)\n");
+    fprintf(stream, "  -lens-opacity N  Set the lens opacity to N (Default: 0.8)\n");
 }
 
 int main(int argc, char **argv)
 {
+    View view = {0};
+    view.lens_opacity = 0.8;
+
     double zoom_factor = 0.1;
-    size_t lens_zoom_factor = 50;
+    size_t lens_zoom_factor = 20;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-zoom") == 0) {
@@ -200,7 +207,7 @@ int main(int argc, char **argv)
 
             if (i == argc) {
                 usage(stderr);
-                fprintf(stderr, "ERROR: zoom factor not provided\n");
+                fprintf(stderr, "Error: zoom factor not provided\n");
                 exit(1);
             }
 
@@ -209,7 +216,7 @@ int main(int argc, char **argv)
 
             if (endp != argv[i] + strlen(argv[i])) {
                 usage(stderr);
-                fprintf(stderr, "ERROR: invalid zoom factor `%s`. Expected number\n", argv[i]);
+                fprintf(stderr, "Error: invalid zoom factor `%s`. Expected number\n", argv[i]);
                 exit(1);
             }
         } else if (strcmp(argv[i], "-lens-zoom") == 0) {
@@ -217,7 +224,7 @@ int main(int argc, char **argv)
 
             if (i == argc) {
                 usage(stderr);
-                fprintf(stderr, "ERROR: lens zoom factor not provided\n");
+                fprintf(stderr, "Error: lens zoom factor not provided\n");
                 exit(1);
             }
 
@@ -226,7 +233,30 @@ int main(int argc, char **argv)
 
             if (endp != argv[i] + strlen(argv[i])) {
                 usage(stderr);
-                fprintf(stderr, "ERROR: invalid lens zoom factor `%s`. Expected integer\n", argv[i]);
+                fprintf(stderr, "Error: invalid lens zoom factor `%s`. Expected integer\n", argv[i]);
+                exit(1);
+            }
+        } else if (strcmp(argv[i], "-lens-opacity") == 0) {
+            i++;
+
+            if (i == argc) {
+                usage(stderr);
+                fprintf(stderr, "Error: lens opacity not provided\n");
+                exit(1);
+            }
+
+            char *endp = NULL;
+            view.lens_opacity = strtod(argv[i], &endp);
+
+            if (endp != argv[i] + strlen(argv[i])) {
+                usage(stderr);
+                fprintf(stderr, "Error: invalid lens opacity `%s`. Expected number\n", argv[i]);
+                exit(1);
+            }
+
+            if (view.lens_opacity < 0 || view.lens_opacity > 1) {
+                usage(stderr);
+                fprintf(stderr, "Error: invalid lens opacity `%s`. Expected number between 0.0 and 1.0\n", argv[i]);
                 exit(1);
             }
         } else if (strcmp(argv[i], "-help") == 0) {
@@ -235,9 +265,9 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "-help-ui") == 0) {
             printf("Action           Description\n");
             printf("----------------------------\n");
-            printf("`q`              Quit\n");
-            printf("`s`              Screenshot\n");
-            printf("`s`              Screenshot\n");
+            printf("q                Quit\n");
+            printf("s                Screenshot\n");
+            printf("s                Screenshot\n");
             printf("Right Click      Toggle Lens Mode\n");
             printf("Scroll Up        Zoom in (If in Lens Mode, increase the lens size) \n");
             printf("Scroll Down      Zoom out (If in Lens Mode, decrease the lens size)\n");
@@ -245,7 +275,7 @@ int main(int argc, char **argv)
             exit(0);
         } else {
             usage(stderr);
-            fprintf(stderr, "ERROR: unknown flag `%s`\n", argv[i]);
+            fprintf(stderr, "Error: unknown flag `%s`\n", argv[i]);
             exit(1);
         }
     }
@@ -281,7 +311,6 @@ int main(int argc, char **argv)
     XWindowAttributes window_attr = {0};
     XGetWindowAttributes(display, window, &window_attr);
 
-    View view = {0};
     view.lens_size = 50;
 
     view.transform.matrix[0][0] = XDoubleToFixed(snap->width / window_attr.width);
@@ -296,7 +325,6 @@ int main(int argc, char **argv)
     XEvent event;
     bool running = true;
 
-    size_t image_count = 0;
     while (running) {
         if (view_changed) {
             render_pixmap(display, window_attr.width, window_attr.height, pixmap_picture, window_picture, buffer_picture, &view);
@@ -313,7 +341,7 @@ int main(int argc, char **argv)
                             running = false;
                             break;
                         case 's':
-                            save_screen(display, root, &image_count);
+                            save_screen(display, root);
                             break;
                     }
                     break;

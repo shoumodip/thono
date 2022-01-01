@@ -43,6 +43,15 @@ Set the lens size zoom factor to N.
 $ ./thono -lens-zoom 69
 ```
 
+### `-lens-opacity N`
+Set the lens opacity to N.
+
+- Default: `0.8`
+
+```console
+$ ./thono -lens-opacity 0.7
+```
+
 ### `-help`
 Display the usage information.
 
