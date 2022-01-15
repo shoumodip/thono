@@ -3,9 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <stdbool.h>
 
 #include <time.h>
+#include <errno.h>
 #include <unistd.h>
 #include <jpeglib.h>
 #include <X11/Xlib.h>
@@ -17,6 +19,19 @@
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
+void assert(bool condition, const char *format, ...)
+{
+    if (!condition) {
+        va_list args;
+        va_start(args, format);
+        fprintf(stderr, "Error: ");
+        vfprintf(stderr, format, args);
+        fprintf(stderr, "\n");
+        va_end(args);
+        exit(1);
+    }
+}
+
 void save_image(XImage *image)
 {
     const time_t instant = time(NULL);
@@ -26,9 +41,11 @@ void save_image(XImage *image)
     snprintf(file_path, length, SHOT_PATH_FMT, instant);
 
     FILE* f = fopen(file_path, "wb");
-    if (f == NULL) return;
+    assert(f, "could not open file '%s' for screenshot: %s", file_path, strerror(errno));
 
     char *buffer = malloc(3 * image->width * image->height);
+    assert(buffer, "could not allocate memory for screenshot: %s", strerror(errno));
+
     for (int y = 0; y < image->height; y++) {
         for (int x = 0; x < image->width; x++) {
             const size_t pixel = XGetPixel(image, x, y);
@@ -202,6 +219,7 @@ void usage(FILE *stream)
     fprintf(stream, "Usage:\n");
     fprintf(stream, "  thono [FLAGS]\n");
     fprintf(stream, "Flags:\n");
+    fprintf(stream, "  -snap            Take a screenshot of the screen and exit\n");
     fprintf(stream, "  -help            Display this help message\n");
     fprintf(stream, "  -help-ui         Display help message about the UI\n");
     fprintf(stream, "  -zoom N          Set the magnification zoom factor to N (Default: 0.1)\n");
@@ -223,8 +241,7 @@ int main(int argc, char **argv)
 
             if (i == argc) {
                 usage(stderr);
-                fprintf(stderr, "Error: zoom factor not provided\n");
-                exit(1);
+                assert(false, "zoom factor not provided");
             }
 
             char *endp = NULL;
@@ -232,16 +249,14 @@ int main(int argc, char **argv)
 
             if (endp != argv[i] + strlen(argv[i])) {
                 usage(stderr);
-                fprintf(stderr, "Error: invalid zoom factor `%s`. Expected number\n", argv[i]);
-                exit(1);
+                assert(false, "invalid zoom factor `%s`. Expected number", argv[i]);
             }
         } else if (strcmp(argv[i], "-lens-zoom") == 0) {
             i++;
 
             if (i == argc) {
                 usage(stderr);
-                fprintf(stderr, "Error: lens zoom factor not provided\n");
-                exit(1);
+                assert(false, "lens zoom factor not provided");
             }
 
             char *endp = NULL;
@@ -249,16 +264,14 @@ int main(int argc, char **argv)
 
             if (endp != argv[i] + strlen(argv[i])) {
                 usage(stderr);
-                fprintf(stderr, "Error: invalid lens zoom factor `%s`. Expected integer\n", argv[i]);
-                exit(1);
+                assert(false, "invalid lens zoom factor `%s`. Expected integer", argv[i]);
             }
         } else if (strcmp(argv[i], "-lens-opacity") == 0) {
             i++;
 
             if (i == argc) {
                 usage(stderr);
-                fprintf(stderr, "Error: lens opacity not provided\n");
-                exit(1);
+                assert(false, "lens opacity not provided");
             }
 
             char *endp = NULL;
@@ -266,14 +279,12 @@ int main(int argc, char **argv)
 
             if (endp != argv[i] + strlen(argv[i])) {
                 usage(stderr);
-                fprintf(stderr, "Error: invalid lens opacity `%s`. Expected number\n", argv[i]);
-                exit(1);
+                assert(false, "invalid lens opacity `%s`. Expected number", argv[i]);
             }
 
             if (view.lens_opacity < 0 || view.lens_opacity > 1) {
                 usage(stderr);
-                fprintf(stderr, "Error: invalid lens opacity `%s`. Expected number between 0.0 and 1.0\n", argv[i]);
-                exit(1);
+                assert(false, "invalid lens opacity `%s`. Expected number between 0.0 and 1.0", argv[i]);
             }
         } else if (strcmp(argv[i], "-help") == 0) {
             usage(stdout);
@@ -289,14 +300,25 @@ int main(int argc, char **argv)
             printf("Scroll Down      Zoom out (If in Lens Mode, decrease the lens size)\n");
             printf("Left Click Drag  Drag the zoom view\n");
             exit(0);
+        } else if (strcmp(argv[i], "-snap") == 0) {
+            Display *display = XOpenDisplay(NULL);
+            assert(display, "could not open display");
+
+            XImage *snap = snap_screen(display, DefaultRootWindow(display));
+            save_image(snap);
+            XDestroyImage(snap);
+
+            XCloseDisplay(display);
+            exit(0);
         } else {
             usage(stderr);
-            fprintf(stderr, "Error: unknown flag `%s`\n", argv[i]);
-            exit(1);
+            assert(false, "unknown flag `%s`", argv[i]);
         }
     }
 
     Display *display = XOpenDisplay(NULL);
+    assert(display, "could not open display");
+
     Window root = RootWindow(display, DefaultScreen(display));
     XImage *snap = snap_screen(display, root);
 
