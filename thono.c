@@ -110,12 +110,12 @@ typedef struct {
 } View;
 
 void render_pixmap(Display *display,
-        size_t width,
-        size_t height,
-        Picture pixmap_picture,
-        Picture window_picture,
-        Picture buffer_picture,
-        View *view)
+                   size_t width,
+                   size_t height,
+                   Picture pixmap_picture,
+                   Picture window_picture,
+                   Picture buffer_picture,
+                   View *view)
 {
     view->transform.matrix[2][2] = XDoubleToFixed(view->zoom);
     XRenderSetPictureTransform(display, pixmap_picture, &view->transform);
@@ -146,16 +146,16 @@ void render_pixmap(Display *display,
         start.y = MAX(start.y, 0);
 
         XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
-                0, 0, start.x, height);
+                             0, 0, start.x, height);
 
         XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
-                end.x, 0, width - start.x, height);
+                             end.x, 0, width - start.x, height);
 
         XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
-                start.x, 0, end.x, start.y);
+                             start.x, 0, end.x, start.y);
 
         XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
-                start.x, end.y, end.x, height - start.y);
+                             start.x, end.y, end.x, height - start.y);
 
         for (int y = start.y; y < end.y; ++y) {
             for (int x = start.x; x < end.x; ++x) {
@@ -165,7 +165,7 @@ void render_pixmap(Display *display,
 
                 if (length > view->lens_size * view->lens_size) {
                     XRenderFillRectangle(display, PictOpOver, buffer_picture, &focus,
-                            x, y, 1, 1);
+                                         x, y, 1, 1);
                 }
             }
         }
@@ -189,7 +189,7 @@ void usage(FILE *stream)
     fprintf(stream, "  -help            Display this help message\n");
     fprintf(stream, "  -help-ui         Display help message about the UI\n");
     fprintf(stream, "  -zoom N          Set the magnification zoom factor to N (Default: 0.1)\n");
-    fprintf(stream, "  -lens-zoom N     Set the lens size zoom factor to N (Default: 25)\n");
+    fprintf(stream, "  -lens-zoom N     Set the lens size zoom factor to N (Default: 50)\n");
     fprintf(stream, "  -lens-opacity N  Set the lens opacity to N (Default: 0.8)\n");
 }
 
@@ -199,7 +199,7 @@ int main(int argc, char **argv)
     view.lens_opacity = 0.8;
 
     double zoom_factor = 0.1;
-    size_t lens_zoom_factor = 20;
+    size_t lens_zoom_factor = 50;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-zoom") == 0) {
@@ -290,11 +290,11 @@ int main(int argc, char **argv)
     Atom wm_fullscreen = XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", true);
 
     XChangeProperty(display, window, wm_state, XA_ATOM, 32,
-            PropModeReplace, (unsigned char *) &wm_fullscreen, 1);
+                    PropModeReplace, (unsigned char *) &wm_fullscreen, 1);
 
     XMapWindow(display, window);
     XSelectInput(display, window,
-            ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | PointerMotionMask | KeyPressMask);
+                 ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | PointerMotionMask | KeyPressMask);
 
     Pixmap pixmap = XCreatePixmap(display, window, snap->width, snap->height, snap->depth);
     XPutImage(display, pixmap, DefaultGC(display, 0), snap, 0, 0, 0, 0, snap->width, snap->height);
@@ -367,7 +367,8 @@ int main(int argc, char **argv)
 
                         case Button5:
                             if (view.lens_mode) {
-                                view.lens_size -= lens_zoom_factor;
+                                view.lens_size = view.lens_size > lens_zoom_factor
+                                    ? view.lens_size - lens_zoom_factor : 0;
                             } else {
                                 view.zoom -= zoom_factor;
                                 view.zoom_offset.x += (event.xbutton.x - view.move_offset.x) * zoom_factor;
