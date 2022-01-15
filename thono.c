@@ -1,3 +1,4 @@
+#define _XOPEN_SOURCE 500
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -174,11 +175,26 @@ void render_pixmap(Display *display,
     XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
 }
 
-void save_screen(Display *display, Window root)
+void save_screen(Display *display,
+                 size_t width,
+                 size_t height,
+                 Picture window_picture,
+                 Window root)
 {
     XImage *current = snap_screen(display, root);
     save_image(current);
     XDestroyImage(current);
+
+    XRenderColor snap = {
+        .red = UINT16_MAX * 0.4,
+        .green = UINT16_MAX * 0.4,
+        .blue = UINT16_MAX * 0.4,
+        .alpha = UINT16_MAX * 0.1,
+    };
+
+    XRenderFillRectangle(display, PictOpOver, window_picture, &snap, 0, 0, width, height);
+    XFlush(display);
+    usleep(100 * 1000);
 }
 
 void usage(FILE *stream)
@@ -341,7 +357,13 @@ int main(int argc, char **argv)
                             running = false;
                             break;
                         case 's':
-                            save_screen(display, root);
+                            save_screen(display,
+                                        window_attr.width,
+                                        window_attr.height,
+                                        window_picture,
+                                        root);
+
+                            view_changed = true;
                             break;
                     }
                     break;
