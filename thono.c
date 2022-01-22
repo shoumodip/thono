@@ -332,7 +332,7 @@ int main(int argc, char **argv)
 
     XMapWindow(display, window);
     XSelectInput(display, window,
-                 ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | PointerMotionMask | KeyPressMask);
+                 ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | PointerMotionMask | KeyPressMask | ExposureMask);
 
     Pixmap pixmap = XCreatePixmap(display, window, snap->width, snap->height, snap->depth);
     XPutImage(display, pixmap, DefaultGC(display, 0), snap, 0, 0, 0, 0, snap->width, snap->height);
@@ -373,6 +373,11 @@ int main(int argc, char **argv)
             XNextEvent(display, &event);
 
             switch (event.type) {
+                case Expose:
+                    render_pixmap(display, window_attr.width, window_attr.height, pixmap_picture, window_picture, buffer_picture, &view);
+                    view_changed = false;
+                    break;
+
                 case KeyPress:
                     switch (XLookupKeysym(&event.xkey, 0)) {
                         case 'q':
