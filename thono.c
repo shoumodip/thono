@@ -332,7 +332,7 @@ int main(int argc, char **argv)
 
     XMapWindow(display, window);
     XSelectInput(display, window,
-                 ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | PointerMotionMask | KeyPressMask | ExposureMask);
+                 ButtonPressMask | ButtonReleaseMask | ButtonMotionMask | PointerMotionMask | KeyPressMask | KeyReleaseMask | ExposureMask);
 
     Pixmap pixmap = XCreatePixmap(display, window, snap->width, snap->height, snap->depth);
     XPutImage(display, pixmap, DefaultGC(display, 0), snap, 0, 0, 0, 0, snap->width, snap->height);
@@ -349,7 +349,7 @@ int main(int argc, char **argv)
     XWindowAttributes window_attr = {0};
     XGetWindowAttributes(display, window, &window_attr);
 
-    view.lens_size = 50;
+    view.lens_size = 100;
 
     view.transform.matrix[0][0] = XDoubleToFixed(snap->width / window_attr.width);
     view.transform.matrix[1][1] = XDoubleToFixed(snap->height / window_attr.height);
@@ -362,6 +362,7 @@ int main(int argc, char **argv)
 
     XEvent event;
     bool running = true;
+    bool shift_down = false;
 
     while (running) {
         if (view_changed) {
@@ -392,6 +393,20 @@ int main(int argc, char **argv)
 
                             view_changed = true;
                             break;
+
+                        case XK_Shift_L:
+                        case XK_Shift_R:
+                            shift_down = true;
+                            break;
+                    }
+                    break;
+
+                case KeyRelease:
+                    switch (XLookupKeysym(&event.xkey, 0)) {
+                        case XK_Shift_L:
+                        case XK_Shift_R:
+                            shift_down = false;
+                            break;
                     }
                     break;
 
@@ -407,9 +422,10 @@ int main(int argc, char **argv)
                             if (view.lens_mode) {
                                 view.lens_size += lens_zoom_factor;
                             } else {
-                                view.zoom += zoom_factor;
-                                view.zoom_offset.x -= (event.xbutton.x - view.move_offset.x) * zoom_factor;
-                                view.zoom_offset.y -= (event.xbutton.y - view.move_offset.y) * zoom_factor;
+                                const double factor = (shift_down ? 4 : 1) * zoom_factor;
+                                view.zoom += factor;
+                                view.zoom_offset.x -= (event.xbutton.x - view.move_offset.x) * factor;
+                                view.zoom_offset.y -= (event.xbutton.y - view.move_offset.y) * factor;
                             }
                             view_changed = true;
                             break;
@@ -419,9 +435,10 @@ int main(int argc, char **argv)
                                 view.lens_size = view.lens_size > lens_zoom_factor
                                     ? view.lens_size - lens_zoom_factor : 0;
                             } else {
-                                view.zoom -= zoom_factor;
-                                view.zoom_offset.x += (event.xbutton.x - view.move_offset.x) * zoom_factor;
-                                view.zoom_offset.y += (event.xbutton.y - view.move_offset.y) * zoom_factor;
+                                const double factor = (shift_down ? 4 : 1) * zoom_factor;
+                                view.zoom -= factor;
+                                view.zoom_offset.x += (event.xbutton.x - view.move_offset.x) * factor;
+                                view.zoom_offset.y += (event.xbutton.y - view.move_offset.y) * factor;
                             }
                             view_changed = true;
                             break;
