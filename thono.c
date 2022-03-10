@@ -196,6 +196,7 @@ void save_screen(Display *display,
                  size_t width,
                  size_t height,
                  Picture window_picture,
+                 Picture buffer_picture,
                  Window root)
 {
     XImage *current = snap_screen(display, root);
@@ -209,7 +210,9 @@ void save_screen(Display *display,
         .alpha = UINT16_MAX * 0.1,
     };
 
-    XRenderFillRectangle(display, PictOpOver, window_picture, &snap, 0, 0, width, height);
+    XRenderFillRectangle(display, PictOpOver, buffer_picture, &snap, 0, 0, width, height);
+    XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
+
     XFlush(display);
     usleep(100 * 1000);
 }
@@ -234,6 +237,7 @@ int main(int argc, char **argv)
 
     double zoom_factor = 0.1;
     size_t lens_zoom_factor = 50;
+    bool take_snap = false;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-zoom") == 0) {
@@ -301,15 +305,7 @@ int main(int argc, char **argv)
             printf("Left Click Drag  Drag the zoom view\n");
             exit(0);
         } else if (strcmp(argv[i], "-snap") == 0) {
-            Display *display = XOpenDisplay(NULL);
-            assert(display, "could not open display");
-
-            XImage *snap = snap_screen(display, DefaultRootWindow(display));
-            save_image(snap);
-            XDestroyImage(snap);
-
-            XCloseDisplay(display);
-            exit(0);
+            take_snap = true;
         } else {
             usage(stderr);
             assert(false, "unknown flag `%s`", argv[i]);
@@ -370,6 +366,18 @@ int main(int argc, char **argv)
             view_changed = false;
         }
 
+        if (take_snap) {
+            save_screen(display,
+                        window_attr.width,
+                        window_attr.height,
+                        window_picture,
+                        buffer_picture,
+                        root);
+
+            render_pixmap(display, window_attr.width, window_attr.height, pixmap_picture, window_picture, buffer_picture, &view);
+            running = false;
+        }
+
         while (XPending(display) > 0) {
             XNextEvent(display, &event);
 
@@ -384,11 +392,13 @@ int main(int argc, char **argv)
                         case 'q':
                             running = false;
                             break;
+
                         case 's':
                             save_screen(display,
                                         window_attr.width,
                                         window_attr.height,
                                         window_picture,
+                                        buffer_picture,
                                         root);
 
                             view_changed = true;
