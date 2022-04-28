@@ -192,31 +192,6 @@ void render_pixmap(Display *display,
     XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
 }
 
-void save_screen(Display *display,
-                 size_t width,
-                 size_t height,
-                 Picture window_picture,
-                 Picture buffer_picture,
-                 Window root)
-{
-    XImage *current = snap_screen(display, root);
-    save_image(current);
-    XDestroyImage(current);
-
-    XRenderColor snap = {
-        .red = UINT16_MAX * 0.4,
-        .green = UINT16_MAX * 0.4,
-        .blue = UINT16_MAX * 0.4,
-        .alpha = UINT16_MAX * 0.1,
-    };
-
-    XRenderFillRectangle(display, PictOpOver, buffer_picture, &snap, 0, 0, width, height);
-    XRenderComposite(display, PictOpSrc, buffer_picture, 0, window_picture, 0, 0, 0, 0, 0, 0, width, height);
-
-    XFlush(display);
-    usleep(100 * 1000);
-}
-
 void usage(FILE *stream)
 {
     fprintf(stream, "Usage:\n");
@@ -318,6 +293,13 @@ int main(int argc, char **argv)
     Window root = RootWindow(display, DefaultScreen(display));
     XImage *snap = snap_screen(display, root);
 
+    if (take_snap) {
+        save_image(snap);
+        XDestroyImage(snap);
+        XCloseDisplay(display);
+        return 0;
+    }
+
     Window window = XCreateSimpleWindow(display, root, 0, 0, 800, 600, 0, 0, 0);
 
     Atom wm_state = XInternAtom(display, "_NET_WM_STATE", true);
@@ -366,18 +348,6 @@ int main(int argc, char **argv)
             view_changed = false;
         }
 
-        if (take_snap) {
-            save_screen(display,
-                        window_attr.width,
-                        window_attr.height,
-                        window_picture,
-                        buffer_picture,
-                        root);
-
-            render_pixmap(display, window_attr.width, window_attr.height, pixmap_picture, window_picture, buffer_picture, &view);
-            running = false;
-        }
-
         while (XPending(display) > 0) {
             XNextEvent(display, &event);
 
@@ -393,16 +363,11 @@ int main(int argc, char **argv)
                             running = false;
                             break;
 
-                        case 's':
-                            save_screen(display,
-                                        window_attr.width,
-                                        window_attr.height,
-                                        window_picture,
-                                        buffer_picture,
-                                        root);
-
-                            view_changed = true;
-                            break;
+                        case 's': {
+                            XImage *current = snap_screen(display, root);
+                            save_image(current);
+                            XDestroyImage(current);
+                        } break;
 
                         case XK_Shift_L:
                         case XK_Shift_R:
