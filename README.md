@@ -2,11 +2,9 @@
 Zoomer in C.
 
 ## Quick Start
-This project uses [make.h](https://github.com/shoumodip/make.h)
-
 ```console
-$ cc -o make make.c
-$ ./make run
+$ ./build.sh
+$ ./thono
 ```
 
 ## Usage
@@ -23,6 +21,13 @@ $ ./make run
 ## Command Line Usage
 ```console
 $ ./thono [FLAGS]
+```
+
+### `-snap`
+Take a screenshot of the screen and exit.
+
+```console
+$ ./thono -snap
 ```
 
 ### `-zoom N`
