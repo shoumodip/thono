@@ -130,11 +130,15 @@ void app_zoom(App *app, double factor) {
 }
 
 void app_draw(App *app) {
-    XRenderColor black = {0};
+    XRenderColor black = {
+        .red = UINT16_MAX * 0.09375,
+        .green = UINT16_MAX * 0.09375,
+        .blue = UINT16_MAX * 0.09375,
+        .alpha = UINT16_MAX
+    };
     XRenderFillRectangle(app->display, PictOpSrc, app->buffer, &black, 0, 0, app->size.x, app->size.y);
 
     XRenderSetPictureTransform(app->display, app->source, &app->transform);
-
     XRenderComposite(
         app->display, PictOpOver, app->source, 0, app->buffer, 0, 0, 0, 0,
         app->origin.x, app->origin.y, app->size.x - app->origin.x, app->size.y - app->origin.y);
