@@ -198,6 +198,14 @@ void app_next(App *app) {
         case 'q':
             app->running = false;
             break;
+
+        case '0':
+            app->zoom = 1.0;
+            app->lens = 100;
+            app->origin.x = 0;
+            app->origin.y = 0;
+            app->focused = false;
+            app->transform.matrix[2][2] = XDoubleToFixed(app->zoom);
         }
         break;
 

@@ -12,6 +12,7 @@ $ ./build.sh
 | Action          | Description                                         |
 | --------------- | --------------------------------------------------- |
 | `q`             | Quit                                                |
+| `0`             | Reset the view                                      |
 | Scroll Up       | Zoom in (If in Focus Mode, increase the lens size)  |
 | Scroll Down     | Zoom out (If in Focus Mode, decrease the lens size) |
 | Right Click     | Toggle Focus Mode                                   |
