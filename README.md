@@ -16,4 +16,5 @@ $ ./build.sh
 | Scroll Up       | Zoom in (If in Focus Mode, increase the lens size)  |
 | Scroll Down     | Zoom out (If in Focus Mode, decrease the lens size) |
 | Right Click     | Toggle Focus Mode                                   |
+| Middle Click    | Quit                                                |
 | Left Click Drag | Drag the zoom view                                  |

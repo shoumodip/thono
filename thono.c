@@ -218,6 +218,10 @@ void app_next(App *app) {
             app->clicked = true;
             break;
 
+        case Button2:
+            app->running = false;
+            break;
+
         case Button3:
             app->focused = !app->focused;
             break;
