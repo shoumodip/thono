@@ -1,2 +1,2 @@
 #!/bin/sh
-cc -Wall -Wextra -o thono thono.c -lX11 -lXrender
+cc -O3 -o thono src/main.c -lX11 -lXrender
