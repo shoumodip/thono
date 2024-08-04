@@ -20,3 +20,10 @@ $ ./thono
 | Right Click     | Toggle Focus Mode                                   |
 | Middle Click    | Quit                                                |
 | Left Click Drag | Drag the zoom view                                  |
+
+## Screenshot Utility
+Thono can be used as a simple screenshot utility
+
+```console
+$ ./thono -s
+```

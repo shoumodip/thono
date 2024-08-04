@@ -56,18 +56,20 @@ typedef struct {
 void app_init(App *app) {
     app->display = XOpenDisplay(NULL);
     if (!app->display) {
-        fprintf(stderr, "error: could not open display\n");
+        fprintf(stderr, "Error: could not open display\n");
         exit(1);
     }
 
-    Window root = DefaultRootWindow(app->display);
     XWindowAttributes attr = {0};
-    XGetWindowAttributes(app->display, root, &attr);
+    XGetWindowAttributes(app->display, DefaultRootWindow(app->display), &attr);
     app->size = vec_new(attr.width, attr.height);
+}
 
+void app_open(App *app) {
+    Window root = DefaultRootWindow(app->display);
     app->image = XGetImage(app->display, root, 0, 0, app->size.x, app->size.y, AllPlanes, ZPixmap);
     if (!app->image) {
-        fprintf(stderr, "error: could not capture screenshot\n");
+        fprintf(stderr, "Error: could not capture screenshot\n");
         exit(1);
     }
 
@@ -86,7 +88,7 @@ void app_init(App *app) {
 
     XRenderPictFormat *format = XRenderFindStandardFormat(app->display, PictStandardRGB24);
     if (!format) {
-        fprintf(stderr, "error: could not find standard rendering format\n");
+        fprintf(stderr, "Error: could not find standard rendering format\n");
         exit(1);
     }
 
@@ -186,14 +188,14 @@ void app_draw(App *app) {
 void app_save(App *app) {
     XImage *image = XGetImage(app->display, DefaultRootWindow(app->display), 0, 0, app->size.x,
                               app->size.y, AllPlanes, ZPixmap);
-    if (!app->image) {
-        fprintf(stderr, "error: could not capture screenshot\n");
+    if (!image) {
+        fprintf(stderr, "Error: could not capture screenshot\n");
         exit(1);
     }
 
     unsigned char *data = malloc(image->width * image->height * 4);
-    if (!app->image) {
-        fprintf(stderr, "error: could not allocate screenshot buffer\n");
+    if (!data) {
+        fprintf(stderr, "Error: could not allocate screenshot buffer\n");
         exit(1);
     }
 
@@ -211,7 +213,7 @@ void app_save(App *app) {
 
     struct timeval time = {0};
     if (gettimeofday(&time, NULL) < 0) {
-        fprintf(stderr, "error: could not get time\n");
+        fprintf(stderr, "Error: could not get time\n");
         exit(1);
     }
 
@@ -220,10 +222,11 @@ void app_save(App *app) {
     snprintf(path, sizeof(path), "thono-%lld.png", since);
 
     if (!stbi_write_png(path, image->width, image->height, 4, data, image->width * 4)) {
-        fprintf(stderr, "error: could not save screenshot to png\n");
+        fprintf(stderr, "Error: could not save screenshot to png\n");
         exit(1);
     }
 
+    XDestroyImage(image);
     free(data);
 }
 
@@ -310,9 +313,36 @@ void app_next(App *app) {
 }
 
 // Main
-int main(void) {
+void usage(FILE *f) {
+    fprintf(f, "Usage:\n");
+    fprintf(f, "    thono <flags>\n\n");
+    fprintf(f, "Flags:\n");
+    fprintf(f, "    -h   Show this help message\n");
+    fprintf(f, "    -s   Take a screenshot and exit\n");
+}
+
+int main(int argc, char **argv) {
     App app = {0};
+
+    if (argc >= 2) {
+        const char *flag = argv[1];
+        if (!strcmp(flag, "-h")) {
+            usage(stdout);
+            return 0;
+        } else if (!strcmp(flag, "-s")) {
+            app_init(&app);
+            app_save(&app);
+            XCloseDisplay(app.display);
+            return 0;
+        } else {
+            fprintf(stderr, "Error: invalid flag '%s'\n\n", flag);
+            usage(stderr);
+            return 1;
+        }
+    }
+
     app_init(&app);
+    app_open(&app);
 
     while (app.running) {
         app_draw(&app);
