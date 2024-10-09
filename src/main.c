@@ -78,13 +78,21 @@ void app_open(App *app) {
 
     Atom window_state = XInternAtom(app->display, "_NET_WM_STATE", True);
     Atom window_fullscreen = XInternAtom(app->display, "_NET_WM_STATE_FULLSCREEN", True);
-    XChangeProperty(app->display, app->window, window_state, XA_ATOM, 32, PropModeReplace,
-                    (unsigned char *)&window_fullscreen, 1);
+    XChangeProperty(
+        app->display,
+        app->window,
+        window_state,
+        XA_ATOM,
+        32,
+        PropModeReplace,
+        (unsigned char *)&window_fullscreen,
+        1);
 
     XMapWindow(app->display, app->window);
-    XSelectInput(app->display, app->window,
-                 ButtonPressMask | ButtonReleaseMask | PointerMotionMask | KeyReleaseMask |
-                     ExposureMask);
+    XSelectInput(
+        app->display,
+        app->window,
+        ButtonPressMask | ButtonReleaseMask | PointerMotionMask | KeyReleaseMask | ExposureMask);
 
     XRenderPictFormat *format = XRenderFindStandardFormat(app->display, PictStandardRGB24);
     if (!format) {
@@ -137,13 +145,24 @@ void app_zoom(App *app, double factor) {
 
 void app_draw(App *app) {
     XRenderColor black = {.red = 6143, .green = 6143, .blue = 6143, .alpha = 65535};
-    XRenderFillRectangle(app->display, PictOpSrc, app->buffer, &black, 0, 0, app->size.x,
-                         app->size.y);
+    XRenderFillRectangle(
+        app->display, PictOpSrc, app->buffer, &black, 0, 0, app->size.x, app->size.y);
 
     XRenderSetPictureTransform(app->display, app->source, &app->transform);
-    XRenderComposite(app->display, PictOpOver, app->source, 0, app->buffer, 0, 0, 0, 0,
-                     app->origin.x, app->origin.y, app->size.x - app->origin.x,
-                     app->size.y - app->origin.y);
+    XRenderComposite(
+        app->display,
+        PictOpOver,
+        app->source,
+        0,
+        app->buffer,
+        0,
+        0,
+        0,
+        0,
+        app->origin.x,
+        app->origin.y,
+        app->size.x - app->origin.x,
+        app->size.y - app->origin.y);
 
     if (app->focused) {
         XRenderColor focus = {0};
@@ -156,17 +175,31 @@ void app_draw(App *app) {
 
         Vec end = {.x = app->mouse.x + app->lens, .y = app->mouse.y + app->lens};
 
-        XRenderFillRectangle(app->display, PictOpOver, app->buffer, &focus, 0, 0, start.x,
-                             app->size.y);
+        XRenderFillRectangle(
+            app->display, PictOpOver, app->buffer, &focus, 0, 0, start.x, app->size.y);
 
-        XRenderFillRectangle(app->display, PictOpOver, app->buffer, &focus, end.x, 0,
-                             app->size.x - start.x, app->size.y);
+        XRenderFillRectangle(
+            app->display,
+            PictOpOver,
+            app->buffer,
+            &focus,
+            end.x,
+            0,
+            app->size.x - start.x,
+            app->size.y);
 
-        XRenderFillRectangle(app->display, PictOpOver, app->buffer, &focus, start.x, 0, end.x,
-                             start.y);
+        XRenderFillRectangle(
+            app->display, PictOpOver, app->buffer, &focus, start.x, 0, end.x - start.x, start.y);
 
-        XRenderFillRectangle(app->display, PictOpOver, app->buffer, &focus, start.x, end.y, end.x,
-                             app->size.y - start.y);
+        XRenderFillRectangle(
+            app->display,
+            PictOpOver,
+            app->buffer,
+            &focus,
+            start.x,
+            end.y,
+            end.x - start.x,
+            app->size.y - start.y);
 
         for (long y = start.y; y < end.y; ++y) {
             for (long x = start.x; x < end.x; ++x) {
@@ -181,13 +214,33 @@ void app_draw(App *app) {
         }
     }
 
-    XRenderComposite(app->display, PictOpSrc, app->buffer, 0, app->output, 0, 0, 0, 0, 0, 0,
-                     app->size.x, app->size.y);
+    XRenderComposite(
+        app->display,
+        PictOpSrc,
+        app->buffer,
+        0,
+        app->output,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        app->size.x,
+        app->size.y);
 }
 
 void app_save(App *app) {
-    XImage *image = XGetImage(app->display, DefaultRootWindow(app->display), 0, 0, app->size.x,
-                              app->size.y, AllPlanes, ZPixmap);
+    XImage *image = XGetImage(
+        app->display,
+        DefaultRootWindow(app->display),
+        0,
+        0,
+        app->size.x,
+        app->size.y,
+        AllPlanes,
+        ZPixmap);
+
     if (!image) {
         fprintf(stderr, "Error: could not capture screenshot\n");
         exit(1);
