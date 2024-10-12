@@ -111,33 +111,49 @@ typedef struct {
 
 void app_open(App *a) {
     app_zero(a);
+    a->camera = a->final;
 
     Pixel *image = app_snap(a);
-    a->window = XCreateSimpleWindow(
-        a->display, DefaultRootWindow(a->display), 0, 0, a->size.x, a->size.y, 0, 0, 0);
 
-    const Atom window_state = XInternAtom(a->display, "_NET_WM_STATE", True);
-    const Atom window_fullscreen = XInternAtom(a->display, "_NET_WM_STATE_FULLSCREEN", True);
-    XChangeProperty(
+    GLint glx_attribs[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 24, None};
+    XVisualInfo *vi = glXChooseVisual(a->display, 0, glx_attribs);
+    if (!vi) {
+        fprintf(stderr, "Error: no appropriate visual found\n");
+        exit(1);
+    }
+
+    const Window root = DefaultRootWindow(a->display);
+
+    XSetWindowAttributes wa;
+    wa.colormap = XCreateColormap(a->display, root, vi->visual, AllocNone);
+    wa.event_mask =
+        ButtonPressMask | ButtonReleaseMask | KeyPressMask | PointerMotionMask | ExposureMask;
+
+    wa.override_redirect = True;
+    wa.save_under = True;
+
+    a->window = XCreateWindow(
         a->display,
-        a->window,
-        window_state,
-        XA_ATOM,
-        32,
-        PropModeReplace,
-        (unsigned char *)&window_fullscreen,
-        1);
+        root,
+        0,
+        0,
+        a->size.x,
+        a->size.y,
+        0,
+        vi->depth,
+        InputOutput,
+        vi->visual,
+        CWColormap | CWEventMask | CWOverrideRedirect | CWSaveUnder,
+        &wa);
 
-    GLint glx_attribs[] = {GLX_RGBA, GLX_DEPTH_SIZE, 24, GLX_DOUBLEBUFFER, None};
-    a->glx_context =
-        glXCreateContext(a->display, glXChooseVisual(a->display, 0, glx_attribs), NULL, GL_TRUE);
+    a->glx_context = glXCreateContext(a->display, vi, NULL, GL_TRUE);
     glXMakeCurrent(a->display, a->window, a->glx_context);
 
-    XMapWindow(a->display, a->window);
-    XSelectInput(
-        a->display,
-        a->window,
-        ButtonPressMask | ButtonReleaseMask | PointerMotionMask | KeyPressMask | ExposureMask);
+    XGrabKeyboard(a->display, root, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+    XMapRaised(a->display, a->window);
+
+    XGetInputFocus(a->display, &a->revert_window, &a->revert_return);
+    XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
 
     a->program = compile_program(vs_source, fs_source);
     glUseProgram(a->program);
@@ -346,6 +362,9 @@ void app_exit(App *a) {
 
     glXMakeCurrent(a->display, None, NULL);
     glXDestroyContext(a->display, a->glx_context);
+
+    XSetInputFocus(a->display, a->revert_window, a->revert_return, CurrentTime);
+    XUngrabKeyboard(a->display, CurrentTime);
     XDestroyWindow(a->display, a->window);
     XCloseDisplay(a->display);
 }

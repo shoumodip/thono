@@ -10,6 +10,9 @@ typedef struct {
     Display *display;
     Window window;
 
+    int revert_return;
+    Window revert_window;
+
     GLuint vao;
     GLuint vbo;
     GLuint ebo;
