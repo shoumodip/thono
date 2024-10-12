@@ -2,7 +2,7 @@
 Zoomer in C
 
 ## Quick Start
-Install [Xlib](https://www.x.org/releases/current/doc/libX11/libX11/libX11.html) and [XRender](https://www.x.org/releases/X11R7.7/doc/libXrender/libXrender.txt)
+Depends on Xlib and OpenGL
 
 ```console
 $ ./build.sh
