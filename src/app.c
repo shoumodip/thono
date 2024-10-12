@@ -126,8 +126,8 @@ void app_open(App *a) {
 
     XSetWindowAttributes wa;
     wa.colormap = XCreateColormap(a->display, root, vi->visual, AllocNone);
-    wa.event_mask =
-        ButtonPressMask | ButtonReleaseMask | KeyPressMask | PointerMotionMask | ExposureMask;
+    wa.event_mask = ButtonPressMask | ButtonReleaseMask | KeyPressMask | PointerMotionMask |
+                    ExposureMask | FocusChangeMask;
 
     wa.override_redirect = True;
     wa.save_under = True;
@@ -146,10 +146,25 @@ void app_open(App *a) {
         CWColormap | CWEventMask | CWOverrideRedirect | CWSaveUnder,
         &wa);
 
+    const Atom wm_state = XInternAtom(a->display, "_NET_WM_STATE", False);
+    const Atom wm_state_above = XInternAtom(a->display, "_NET_WM_STATE_ABOVE", False);
+
+    XChangeProperty(
+        a->display,
+        a->window,
+        wm_state,
+        XA_ATOM,
+        32,
+        PropModeReplace,
+        (unsigned char *)&wm_state_above,
+        1);
+
     a->glx_context = glXCreateContext(a->display, vi, NULL, GL_TRUE);
     glXMakeCurrent(a->display, a->window, a->glx_context);
 
     XGrabKeyboard(a->display, root, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+    XGrabPointer(
+        a->display, a->window, True, 0, GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
     XMapRaised(a->display, a->window);
 
     XGetInputFocus(a->display, &a->revert_window, &a->revert_return);
@@ -283,6 +298,10 @@ void app_loop(App *a) {
                 app_draw(a);
                 break;
 
+            case FocusOut:
+                XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
+                break;
+
             case ButtonPress:
                 switch (e.xbutton.button) {
                 case Button1:
@@ -365,6 +384,7 @@ void app_exit(App *a) {
 
     XSetInputFocus(a->display, a->revert_window, a->revert_return, CurrentTime);
     XUngrabKeyboard(a->display, CurrentTime);
+    XUngrabPointer(a->display, CurrentTime);
     XDestroyWindow(a->display, a->window);
     XCloseDisplay(a->display);
 }
