@@ -1,6 +1,7 @@
 #ifndef THONO_CONFIG_H
 #define THONO_CONFIG_H
 
+#define THONO_SPEED 8.0
 #define THONO_LENS_SIZE 0.1
 #define THONO_ZOOM_FACTOR 1.1
 #define THONO_LENS_FACTOR 1.2
