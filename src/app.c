@@ -112,6 +112,16 @@ void app_open(App *a) {
     app_zero(a);
     a->camera = a->final;
 
+    {
+        int x = 0, y = 0;
+        unsigned int mask;
+
+        Window root = DefaultRootWindow(a->display);
+        XQueryPointer(a->display, root, &root, &root, &x, &y, &x, &y, &mask);
+
+        a->mouse = (Vec2){x, y};
+    }
+
     Pixel *image = app_snap(a);
 
     GLint glx_attribs[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 24, None};
