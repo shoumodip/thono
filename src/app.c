@@ -1,4 +1,3 @@
-#include <X11/Xatom.h>
 #include <sys/time.h>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -145,19 +144,6 @@ void app_open(App *a) {
         vi->visual,
         CWColormap | CWEventMask | CWOverrideRedirect | CWSaveUnder,
         &wa);
-
-    const Atom wm_state = XInternAtom(a->display, "_NET_WM_STATE", False);
-    const Atom wm_state_above = XInternAtom(a->display, "_NET_WM_STATE_ABOVE", False);
-
-    XChangeProperty(
-        a->display,
-        a->window,
-        wm_state,
-        XA_ATOM,
-        32,
-        PropModeReplace,
-        (unsigned char *)&wm_state_above,
-        1);
 
     a->glx_context = glXCreateContext(a->display, vi, NULL, GL_TRUE);
     glXMakeCurrent(a->display, a->window, a->glx_context);
