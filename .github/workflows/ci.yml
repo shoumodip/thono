@@ -16,3 +16,8 @@ jobs:
         run: |
           sudo apt install libgl-dev
           ./build.sh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: thono
