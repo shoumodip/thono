@@ -136,7 +136,7 @@ void app_open(App *a) {
     XSetWindowAttributes wa;
     wa.colormap = XCreateColormap(a->display, root, vi->visual, AllocNone);
     wa.event_mask = ButtonPressMask | ButtonReleaseMask | KeyPressMask | PointerMotionMask |
-                    ExposureMask | FocusChangeMask;
+                    ExposureMask | VisibilityChangeMask | FocusChangeMask;
 
     wa.override_redirect = True;
     wa.save_under = True;
@@ -165,6 +165,7 @@ void app_open(App *a) {
 
     XGetInputFocus(a->display, &a->revert_window, &a->revert_return);
     XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
+    XSelectInput(a->display, root, SubstructureNotifyMask);
 
     a->program = compile_program(vs_source, fs_source);
     glUseProgram(a->program);
@@ -296,6 +297,18 @@ void app_loop(App *a) {
 
             case FocusOut:
                 XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
+                break;
+
+            case VisibilityNotify:
+                if (((XVisibilityEvent *)&e)->state != VisibilityUnobscured) {
+                    XRaiseWindow(a->display, a->window);
+                }
+                break;
+
+            case ConfigureNotify:
+                if (((XConfigureEvent *)&e)->window != a->window) {
+                    XRaiseWindow(a->display, a->window);
+                }
                 break;
 
             case ButtonPress:
