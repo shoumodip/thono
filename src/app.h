@@ -38,7 +38,7 @@ typedef struct {
 } App;
 
 void app_init(App *a);
-void app_open(App *a);
+void app_open(App *a, const char *path);
 void app_save(App *a);
 void app_loop(App *a);
 void app_exit(App *a);
