@@ -27,3 +27,10 @@ Thono can be used as a simple screenshot utility
 ```console
 $ ./thono -s
 ```
+
+## Image Viewer Utility
+Thono can be used as a simple image viewer utility
+
+```console
+$ ./thono <path-to-image>
+```
