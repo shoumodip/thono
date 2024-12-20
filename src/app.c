@@ -278,7 +278,8 @@ void app_open(App *a, const char *path) {
 }
 
 void app_draw(App *a) {
-    glClearColor(THONO_BACKGROUND_COLOR);
+    const Vec4 bg = vec4_mul(a->camera.flash, (Vec4){THONO_BACKGROUND_COLOR});
+    glClearColor(bg.x, bg.y, bg.z, bg.w);
     glClear(GL_COLOR_BUFFER_BIT);
 
     glBindTexture(GL_TEXTURE_2D, a->texture);

@@ -20,6 +20,7 @@ typedef struct {
 
 Vec4 vec4_add(Vec4 a, Vec4 b);
 Vec4 vec4_sub(Vec4 a, Vec4 b);
+Vec4 vec4_mul(Vec4 a, Vec4 b);
 Vec4 vec4_scale(Vec4 a, float b);
 
 #endif // THONO_LA_H

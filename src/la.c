@@ -40,6 +40,14 @@ Vec4 vec4_sub(Vec4 a, Vec4 b) {
     return a;
 }
 
+Vec4 vec4_mul(Vec4 a, Vec4 b) {
+    a.x *= b.x;
+    a.y *= b.y;
+    a.z *= b.z;
+    a.w *= b.w;
+    return a;
+}
+
 Vec4 vec4_scale(Vec4 a, float b) {
     a.x *= b;
     a.y *= b;
