@@ -405,6 +405,7 @@ void app_loop(App *a) {
                 const Vec2 pos = (Vec2){e.xmotion.x, e.xmotion.y};
                 if (a->dragging) {
                     a->final.offset = vec2_add(a->final.offset, vec2_sub(pos, a->mouse));
+                    a->camera.offset = a->final.offset;
                 }
                 a->mouse = pos;
             } break;
