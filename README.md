@@ -5,7 +5,7 @@ Zoomer in C
 Depends on Xlib and OpenGL
 
 ```console
-$ ./build.sh
+$ make
 $ ./thono
 ```
 
@@ -32,5 +32,12 @@ $ ./thono -s
 Thono can be used as a simple image viewer utility
 
 ```console
-$ ./thono <path-to-image>
+$ ./thono [IMAGES]...
 ```
+
+| Action          | Description                                         |
+| --------------- | --------------------------------------------------- |
+| `n`             | Next image                                          |
+| `p`             | Previous image                                      |
+| `j`             | Next image                                          |
+| `k`             | Previous image                                      |

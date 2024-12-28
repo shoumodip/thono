@@ -2,9 +2,25 @@
 #define THONO_APP_H
 
 #include "camera.h"
+#include "da.h"
 #include "gl.h"
 
 #include <GL/glx.h>
+
+typedef struct {
+    GLubyte r;
+    GLubyte g;
+    GLubyte b;
+    GLubyte a;
+} Pixel;
+
+typedef struct {
+    Pixel *data;
+    size_t width;
+    size_t height;
+
+    const char *path;
+} Image;
 
 typedef struct {
     Display *display;
@@ -35,10 +51,13 @@ typedef struct {
 
     Camera final;
     Camera camera;
+
+    size_t current;
+    DynamicArray(Image) images;
 } App;
 
 void app_init(App *a);
-void app_open(App *a, const char *path);
+void app_open(App *a, const char **paths, size_t count);
 void app_save(App *a);
 void app_loop(App *a);
 void app_exit(App *a);

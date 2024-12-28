@@ -1,13 +1,11 @@
+#include <math.h>
 #include <sys/time.h>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
 
 #include "app.h"
 #include "config.h"
+
+#include "stb_image.h"
+#include "stb_image_write.h"
 
 static const char *vs_source = //
     "#version 330 core\n"
@@ -70,13 +68,6 @@ static void app_zoom(App *a, float factor) {
     a->final.offset = vec2_sub(a->mouse, vec2_scale(world, a->final.zoom));
 }
 
-typedef struct {
-    GLubyte r;
-    GLubyte g;
-    GLubyte b;
-    GLubyte a;
-} Pixel;
-
 static Pixel *app_snap(App *a) {
     const uint width = a->size.x;
     const uint height = a->size.y;
@@ -109,6 +100,67 @@ static Pixel *app_snap(App *a) {
     return pixels;
 }
 
+static void app_load_image(App *a) {
+    Image *image = &a->images.data[a->current];
+    if (image->path) {
+        int w, h;
+        Pixel *data = (Pixel *)stbi_load(image->path, &w, &h, NULL, 4);
+        if (!data) {
+            fprintf(stderr, "Error: could not load image '%s'\n", image->path);
+            exit(1); // TODO: handle IO error gracefully
+        }
+
+        image->width = a->size.x;
+        image->height = a->size.y;
+        if (w > image->width || h > image->height) {
+            const float ax = (float)w / image->width;
+            const float ay = (float)h / image->height;
+            const float scale = ax > ay ? ax : ay;
+
+            image->width = floor(image->width * scale);
+            image->height = floor(image->height * scale);
+        }
+
+        image->data = malloc(image->width * image->height * sizeof(Pixel));
+        if (!image->data) {
+            fprintf(stderr, "Error: could not allocate image buffer\n");
+            exit(1);
+        }
+
+        const size_t x = (image->width - w) / 2;
+        const size_t y = (image->height - h) / 2;
+        for (size_t j = 0; j < image->height; ++j) {
+            for (size_t i = 0; i < image->width; ++i) {
+                if (i >= x && i < x + w && j >= y && j < y + h) {
+                    image->data[j * (size_t)image->width + i] = data[(j - y) * w + (i - x)];
+                } else {
+                    const Vec4 c = vec4_scale((Vec4){THONO_BACKGROUND_COLOR}, 0xFF);
+                    image->data[j * (size_t)image->width + i] = (Pixel){c.x, c.y, c.z, c.w};
+                }
+            }
+        }
+
+        stbi_image_free(data);
+        image->path = NULL;
+    }
+
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        image->width,
+        image->height,
+        0,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        image->data);
+
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    app_zero(a);
+    a->camera = a->final;
+}
+
 void app_init(App *a) {
     a->display = XOpenDisplay(NULL);
     if (!a->display) {
@@ -126,7 +178,7 @@ typedef struct {
     Vec2 uv;
 } Vertex;
 
-void app_open(App *a, const char *path) {
+void app_open(App *a, const char **paths, size_t count) {
     app_zero(a);
     a->camera = a->final;
 
@@ -140,49 +192,17 @@ void app_open(App *a, const char *path) {
         a->mouse = (Vec2){x, y};
     }
 
-    Pixel *image = NULL;
-    size_t image_width = a->size.x;
-    size_t image_height = a->size.y;
-
-    if (path) {
-        int w, h;
-        Pixel *data = (Pixel *)stbi_load(path, &w, &h, NULL, 4);
-        if (!data) {
-            fprintf(stderr, "Error: could not load image '%s'\n", path);
-            exit(1);
+    if (count) {
+        for (size_t i = 0; i < count; i++) {
+            da_append(&a->images, (Image){.path = paths[i]});
         }
-
-        if (w > image_width || h > image_height) {
-            const float ax = (float)w / image_width;
-            const float ay = (float)h / image_height;
-            const float scale = ax > ay ? ax : ay;
-
-            image_width = floor(image_width * scale);
-            image_height = floor(image_height * scale);
-        }
-
-        image = malloc(image_width * image_height * sizeof(Pixel));
-        if (!image) {
-            fprintf(stderr, "Error: could not allocate image buffer\n");
-            exit(1);
-        }
-
-        const size_t x = (image_width - w) / 2;
-        const size_t y = (image_height - h) / 2;
-        for (size_t j = 0; j < image_height; ++j) {
-            for (size_t i = 0; i < image_width; ++i) {
-                if (i >= x && i < x + w && j >= y && j < y + h) {
-                    image[j * (size_t)image_width + i] = data[(j - y) * w + (i - x)];
-                } else {
-                    const Vec4 c = vec4_scale((Vec4){THONO_BACKGROUND_COLOR}, 0xFF);
-                    image[j * (size_t)image_width + i] = (Pixel){c.x, c.y, c.z, c.w};
-                }
-            }
-        }
-
-        stbi_image_free(data);
     } else {
-        image = app_snap(a);
+        const Image image = {
+            .data = app_snap(a),
+            .width = a->size.x,
+            .height = a->size.y,
+        };
+        da_append(&a->images, image);
     }
 
     GLint glx_attribs[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 24, None};
@@ -264,10 +284,7 @@ void app_open(App *a, const char *path) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA, image_width, image_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image);
-    glGenerateMipmap(GL_TEXTURE_2D);
-    free(image);
+    app_load_image(a);
 
     a->uniform_lens = get_uniform(a->program, "lens");
     a->uniform_zoom = get_uniform(a->program, "zoom");
@@ -422,6 +439,25 @@ void app_loop(App *a) {
                 case '0':
                     app_zero(a);
                     break;
+
+                case 'n':
+                case 'j':
+                    a->current++;
+                    if (a->current >= a->images.count) {
+                        a->current = 0;
+                    }
+                    app_load_image(a);
+                    break;
+
+                case 'p':
+                case 'k':
+                    if (a->current) {
+                        a->current--;
+                    } else {
+                        a->current = a->images.count - 1;
+                    }
+                    app_load_image(a);
+                    break;
                 }
                 break;
             }
@@ -444,4 +480,9 @@ void app_exit(App *a) {
     XUngrabPointer(a->display, CurrentTime);
     XDestroyWindow(a->display, a->window);
     XCloseDisplay(a->display);
+
+    for (size_t i = 0; i < a->images.count; i++) {
+        free(a->images.data[i].data);
+    }
+    da_free(&a->images);
 }
