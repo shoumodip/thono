@@ -28,6 +28,12 @@ Thono can be used as a simple screenshot utility
 $ ./thono -s
 ```
 
+An optional delay in seconds can be provided
+
+```console
+$ ./thono 5
+```
+
 ## Image Viewer Utility
 Thono can be used as a simple image viewer utility
 
