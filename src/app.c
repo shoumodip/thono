@@ -48,7 +48,7 @@ static const char *fs_source = //
 static double get_time(void) {
     struct timeval time = {0};
     if (gettimeofday(&time, NULL) < 0) {
-        fprintf(stderr, "Error: could not get time\n");
+        fprintf(stderr, "ERROR: Could not get time\n");
         exit(1);
     }
     return time.tv_sec + time.tv_usec / 1e6;
@@ -75,13 +75,13 @@ static Pixel *app_snap(App *a) {
 
     XImage *image = XGetImage(a->display, root, 0, 0, width, height, AllPlanes, ZPixmap);
     if (!image) {
-        fprintf(stderr, "Error: could not capture screenshot\n");
+        fprintf(stderr, "ERROR: Could not capture screenshot\n");
         exit(1);
     }
 
     Pixel *pixels = malloc(width * height * sizeof(Pixel));
     if (!pixels) {
-        fprintf(stderr, "Error: could not allocate screenshot buffer\n");
+        fprintf(stderr, "ERROR: Could not allocate screenshot buffer\n");
         exit(1);
     }
 
@@ -101,61 +101,75 @@ static Pixel *app_snap(App *a) {
 }
 
 static void app_load_image(App *a) {
-    Image *image = &a->images.data[a->current];
-    if (image->path) {
-        int w, h;
-        Pixel *data = (Pixel *)stbi_load(image->path, &w, &h, NULL, 4);
-        if (!data) {
-            fprintf(stderr, "Error: could not load image '%s'\n", image->path);
-            exit(1); // TODO: handle IO error gracefully
-        }
+    while (True) {
+        Image *image = &a->images.data[a->current];
+        if (image->path) {
+            int w, h;
+            Pixel *data = (Pixel *)stbi_load(image->path, &w, &h, NULL, 4);
+            if (!data) {
+                fprintf(stderr, "ERROR: Could not load image '%s'\n", image->path);
 
-        image->width = a->size.x;
-        image->height = a->size.y;
-        if (w > image->width || h > image->height) {
-            const float ax = (float)w / image->width;
-            const float ay = (float)h / image->height;
-            const float scale = ax > ay ? ax : ay;
+                da_remove(&a->images, a->current);
+                if (a->images.count == 0) {
+                    fprintf(
+                        stderr, "ERROR: Could not load any of the requested images! Exiting...\n");
+                    exit(1);
+                }
 
-            image->width = floor(image->width * scale);
-            image->height = floor(image->height * scale);
-        }
+                if (a->current == a->images.count) {
+                    a->current = 0;
+                }
+                continue;
+            }
 
-        image->data = malloc(image->width * image->height * sizeof(Pixel));
-        if (!image->data) {
-            fprintf(stderr, "Error: could not allocate image buffer\n");
-            exit(1);
-        }
+            image->width = a->size.x;
+            image->height = a->size.y;
+            if (w > image->width || h > image->height) {
+                const float ax = (float)w / image->width;
+                const float ay = (float)h / image->height;
+                const float scale = ax > ay ? ax : ay;
 
-        const size_t x = (image->width - w) / 2;
-        const size_t y = (image->height - h) / 2;
-        for (size_t j = 0; j < image->height; ++j) {
-            for (size_t i = 0; i < image->width; ++i) {
-                if (i >= x && i < x + w && j >= y && j < y + h) {
-                    image->data[j * (size_t)image->width + i] = data[(j - y) * w + (i - x)];
-                } else {
-                    const Vec4 c = vec4_scale((Vec4){THONO_BACKGROUND_COLOR}, 0xFF);
-                    image->data[j * (size_t)image->width + i] = (Pixel){c.x, c.y, c.z, c.w};
+                image->width = floor(image->width * scale);
+                image->height = floor(image->height * scale);
+            }
+
+            image->data = malloc(image->width * image->height * sizeof(Pixel));
+            if (!image->data) {
+                fprintf(stderr, "ERROR: Could not allocate image buffer\n");
+                exit(1);
+            }
+
+            const size_t x = (image->width - w) / 2;
+            const size_t y = (image->height - h) / 2;
+            for (size_t j = 0; j < image->height; ++j) {
+                for (size_t i = 0; i < image->width; ++i) {
+                    if (i >= x && i < x + w && j >= y && j < y + h) {
+                        image->data[j * (size_t)image->width + i] = data[(j - y) * w + (i - x)];
+                    } else {
+                        const Vec4 c = vec4_scale((Vec4){THONO_BACKGROUND_COLOR}, 0xFF);
+                        image->data[j * (size_t)image->width + i] = (Pixel){c.x, c.y, c.z, c.w};
+                    }
                 }
             }
+
+            stbi_image_free(data);
+            image->path = NULL;
         }
 
-        stbi_image_free(data);
-        image->path = NULL;
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA,
+            image->width,
+            image->height,
+            0,
+            GL_RGBA,
+            GL_UNSIGNED_BYTE,
+            image->data);
+
+        glGenerateMipmap(GL_TEXTURE_2D);
+        break;
     }
-
-    glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        GL_RGBA,
-        image->width,
-        image->height,
-        0,
-        GL_RGBA,
-        GL_UNSIGNED_BYTE,
-        image->data);
-
-    glGenerateMipmap(GL_TEXTURE_2D);
 
     app_zero(a);
     a->camera = a->final;
@@ -164,7 +178,7 @@ static void app_load_image(App *a) {
 void app_init(App *a) {
     a->display = XOpenDisplay(NULL);
     if (!a->display) {
-        fprintf(stderr, "Error: could not open display\n");
+        fprintf(stderr, "ERROR: Could not open display\n");
         exit(1);
     }
 
@@ -208,7 +222,7 @@ void app_open(App *a, const char **paths, size_t count) {
     GLint glx_attribs[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 24, None};
     XVisualInfo *vi = glXChooseVisual(a->display, 0, glx_attribs);
     if (!vi) {
-        fprintf(stderr, "Error: no appropriate visual found\n");
+        fprintf(stderr, "ERROR: No appropriate visual found\n");
         exit(1);
     }
 
@@ -335,7 +349,7 @@ void app_save(App *a) {
     snprintf(buffer, sizeof(buffer), "thono-%lld.png", since);
 
     if (!stbi_write_png(buffer, a->size.x, a->size.y, 4, image, a->size.x * sizeof(*image))) {
-        fprintf(stderr, "Error: could not save screenshot to png\n");
+        fprintf(stderr, "ERROR: Could not save screenshot to png\n");
         exit(1);
     }
 

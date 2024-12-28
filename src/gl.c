@@ -6,7 +6,7 @@
 GLint get_uniform(GLuint program, const char *name) {
     const GLint uniform = glGetUniformLocation(program, name);
     if (uniform < 0) {
-        fprintf(stderr, "Error: could not get uniform '%s'\n", name);
+        fprintf(stderr, "ERROR: Could not get uniform '%s'\n", name);
         exit(1);
     }
     return uniform;
@@ -22,7 +22,7 @@ GLuint compile_shader(const char *source, GLenum type) {
     if (!ok) {
         char log[512];
         glGetShaderInfoLog(shader, sizeof(log), NULL, log);
-        fprintf(stderr, "Error: could not compile shader\n%s\n", log);
+        fprintf(stderr, "ERROR: Could not compile shader\n%s\n", log);
         exit(1);
     }
 
@@ -43,7 +43,7 @@ GLuint compile_program(const char *vs_source, const char *fs_source) {
     if (!ok) {
         char log[512];
         glGetProgramInfoLog(program, sizeof(log), NULL, log);
-        fprintf(stderr, "Error: could not link program\n%s\n", log);
+        fprintf(stderr, "ERROR: Could not link program\n%s\n", log);
         exit(1);
     }
 

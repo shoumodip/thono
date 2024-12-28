@@ -20,6 +20,13 @@
         memset((l), 0, sizeof(*(l)));                                                              \
     } while (0)
 
+#define da_remove(l, i)                                                                            \
+    do {                                                                                           \
+        assert((i) < (l)->count);                                                                  \
+        memcpy((l)->data + i, (l)->data + (i) + 1, ((l)->count - (i) - 1) * sizeof(*(l)->data));   \
+        (l)->count--;                                                                              \
+    } while (0)
+
 #define da_append(l, v)                                                                            \
     do {                                                                                           \
         if ((l)->count >= (l)->capacity) {                                                         \
