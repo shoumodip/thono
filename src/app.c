@@ -108,7 +108,7 @@ static Pixel *app_snap(App *a) {
     return pixels;
 }
 
-static void app_load_image(App *a) {
+static void app_load_image(App *a, Bool next_if_failed) {
     while (True) {
         Image *image = &a->images.data[a->current];
         if (image->path) {
@@ -124,8 +124,16 @@ static void app_load_image(App *a) {
                     exit(1);
                 }
 
-                if (a->current == a->images.count) {
-                    a->current = 0;
+                if (next_if_failed) {
+                    if (a->current == a->images.count) {
+                        a->current = 0;
+                    }
+                } else {
+                    if (a->current) {
+                        a->current--;
+                    } else {
+                        a->current = a->images.count - 1;
+                    }
                 }
                 continue;
             }
@@ -306,7 +314,7 @@ void app_open(App *a, const char **paths, size_t count) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    app_load_image(a);
+    app_load_image(a, True);
 
     a->uniform_lens = get_uniform(a->program, "lens");
     a->uniform_zoom = get_uniform(a->program, "zoom");
@@ -453,7 +461,7 @@ void app_loop(App *a) {
                     if (a->current >= a->images.count) {
                         a->current = 0;
                     }
-                    app_load_image(a);
+                    app_load_image(a, True);
                     break;
 
                 case 'p':
@@ -463,7 +471,7 @@ void app_loop(App *a) {
                     } else {
                         a->current = a->images.count - 1;
                     }
-                    app_load_image(a);
+                    app_load_image(a, False);
                     break;
 
                 case 'w': {
