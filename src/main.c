@@ -94,7 +94,7 @@ defer:
     return result;
 }
 
-static int wallpaper_restore(App *a, const char *path, const char *program) {
+static int wallpaper_restore(App *a, const char *path) {
     int result = 0;
     DynamicArray(char) restore = {0};
 
@@ -111,24 +111,30 @@ static int wallpaper_restore(App *a, const char *path, const char *program) {
 
         da_append_cstr(&restore, env_home);
         da_append(&restore, '/');
-        da_append_cstr(&restore, THONO_WALLPAPER_RESTORE_PATH);
+        da_append_cstr(&restore, THONO_WALLPAPER_RESTORE_PATH_DEFAULT);
         da_append(&restore, '\0');
     }
 
-    const size_t cwd = restore.count;
+    const size_t program = restore.count;
+    while (True) {
+        da_append_many(&restore, NULL, DA_INIT_CAP);
 
-    da_append_many(&restore, NULL, DA_INIT_CAP);
-    while (!getcwd(restore.data + cwd, restore.capacity - cwd)) {
-        if (errno != ERANGE) {
-            fprintf(
-                stderr, "ERROR: Could not create wallpaper restore script '%s'\n", restore.data);
+        const size_t capacity = restore.capacity - program;
+        const long count = readlink("/proc/self/exe", restore.data + program, capacity);
+
+        if (count < 0) {
+            fprintf(stderr, "ERROR: Could not get current program path\n");
             return_defer(1);
         }
 
+        if (count < capacity) {
+            restore.count += count;
+            break;
+        }
+
         restore.count = restore.capacity;
-        da_append_many(&restore, NULL, DA_INIT_CAP);
     }
-    restore.count = cwd + strlen(restore.data + cwd);
+    da_append(&restore, '\0');
 
     FILE *f = fopen(restore.data, "w");
     if (!f) {
@@ -139,9 +145,8 @@ static int wallpaper_restore(App *a, const char *path, const char *program) {
     fprintf(
         f,
         "#!/bin/sh\n"
-        "%s/%s -w %s\n",
-        restore.data + cwd,
-        program,
+        "%s -w %s\n",
+        restore.data + program,
         path);
 
     fclose(f);
@@ -207,7 +212,7 @@ int main(int argc, const char **argv) {
                 return 1;
             }
 
-            return wallpaper_restore(&app, argv[2], argv[0]);
+            return wallpaper_restore(&app, argv[2]);
         }
     }
 
