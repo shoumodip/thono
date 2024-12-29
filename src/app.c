@@ -2,6 +2,7 @@
 #include <sys/time.h>
 
 #include <X11/Xatom.h>
+#include <X11/cursorfont.h>
 
 #include "app.h"
 #include "config.h"
@@ -25,6 +26,10 @@ static const char *vs_source = //
     "    texcoord = uv;\n"
     "}\n";
 
+#define STRINGIFY(x) #x
+#define TO_STRING(x) STRINGIFY(x)
+#define SEL_COLOR TO_STRING(vec4(THONO_SELECTION_COLOR))
+
 static const char *fs_source = //
     "#version 330 core\n"
     "\n"
@@ -39,13 +44,35 @@ static const char *fs_source = //
     "uniform float aspect;\n"
     "uniform sampler2D image;\n"
     "\n"
+    "uniform bool select_began;\n"
+    "uniform vec2 select_start;\n"
+    "\n"
     "void main()\n"
     "{\n"
     "    color = texture(image, texcoord);\n"
     "    if (length((mouse - texcoord) * vec2(aspect, 1.0)) >= lens / zoom) {\n"
     "        color *= flash;\n"
     "    }\n"
+    "    if (select_began) {\n"
+    "        vec2 a = vec2(min(mouse.x, select_start.x), min(mouse.y, select_start.y));\n"
+    "        vec2 b = vec2(max(mouse.x, select_start.x), max(mouse.y, select_start.y));\n"
+    "        if (a.x <= texcoord.x && texcoord.x <= b.x) {\n"
+    "            if (abs(texcoord.y - a.y) < 0.001 || abs(texcoord.y - b.y) < 0.001) {\n"
+    "                color = " SEL_COLOR ";\n"
+    "            }\n"
+    "        }\n"
+    "        if (a.y <= texcoord.y && texcoord.y <= b.y) {\n"
+    "            if (aspect * abs(texcoord.x - a.x) < 0.001 ||\n"
+    "                aspect * abs(texcoord.x - b.x) < 0.001) {\n"
+    "                color = " SEL_COLOR ";\n"
+    "            }\n"
+    "        }\n"
+    "    }\n"
     "}\n";
+
+#undef SELECTION_COLOR_WRAPPED
+#undef STRINGIFY
+#undef TO_STRING
 
 static double get_time(void) {
     struct timeval time = {0};
@@ -70,10 +97,12 @@ static void app_zoom(App *a, float factor) {
     a->final.offset = vec2_sub(a->mouse, vec2_scale(world, a->final.zoom));
 }
 
-static XImage *app_snap_ximage(App *a) {
+static XImage *app_snap_ximage(App *a, Vec2 start, Vec2 size) {
     const Window root = DefaultRootWindow(a->display);
 
-    XImage *image = XGetImage(a->display, root, 0, 0, a->size.x, a->size.y, AllPlanes, ZPixmap);
+    XImage *image =
+        XGetImage(a->display, root, start.x, start.y, size.x, size.y, AllPlanes, ZPixmap);
+
     if (!image) {
         fprintf(stderr, "ERROR: Could not capture screenshot\n");
         exit(1);
@@ -82,11 +111,11 @@ static XImage *app_snap_ximage(App *a) {
     return image;
 }
 
-static Pixel *app_snap(App *a) {
-    const uint width = a->size.x;
-    const uint height = a->size.y;
+static Pixel *app_snap(App *a, Vec2 start, Vec2 size) {
+    const uint width = size.x;
+    const uint height = size.y;
 
-    XImage *image = app_snap_ximage(a);
+    XImage *image = app_snap_ximage(a, start, size);
     Pixel *pixels = malloc(width * height * sizeof(Pixel));
     if (!pixels) {
         fprintf(stderr, "ERROR: Could not allocate screenshot buffer\n");
@@ -106,6 +135,21 @@ static Pixel *app_snap(App *a) {
 
     XDestroyImage(image);
     return pixels;
+}
+
+static void app_save_image(App *a, Vec2 start, Vec2 size) {
+    Pixel *image = app_snap(a, start, size);
+    const long long since = get_time() * 1000;
+
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "thono-%lld.png", since);
+
+    if (!stbi_write_png(buffer, size.x, size.y, 4, image, size.x * sizeof(*image))) {
+        fprintf(stderr, "ERROR: Could not save screenshot to png\n");
+        exit(1);
+    }
+
+    free(image);
 }
 
 static void app_load_image(App *a, Bool next_if_failed) {
@@ -220,6 +264,7 @@ void app_open(App *a, const char **paths, size_t count) {
         XQueryPointer(a->display, root, &root, &root, &x, &y, &x, &y, &mask);
 
         a->mouse = (Vec2){x, y};
+        a->select_cursor = XCreateFontCursor(a->display, XC_crosshair);
     }
 
     if (count) {
@@ -228,7 +273,7 @@ void app_open(App *a, const char **paths, size_t count) {
         }
     } else {
         const Image image = {
-            .data = app_snap(a),
+            .data = app_snap(a, (Vec2){0}, a->size),
             .width = a->size.x,
             .height = a->size.y,
         };
@@ -269,10 +314,18 @@ void app_open(App *a, const char **paths, size_t count) {
     a->glx_context = glXCreateContext(a->display, vi, NULL, GL_TRUE);
     glXMakeCurrent(a->display, a->window, a->glx_context);
 
+    XMapRaised(a->display, a->window);
     XGrabKeyboard(a->display, root, True, GrabModeAsync, GrabModeAsync, CurrentTime);
     XGrabPointer(
-        a->display, a->window, True, 0, GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
-    XMapRaised(a->display, a->window);
+        a->display,
+        a->window,
+        True,
+        0,
+        GrabModeAsync,
+        GrabModeAsync,
+        None,
+        a->select_on ? a->select_cursor : None,
+        CurrentTime);
 
     XGetInputFocus(a->display, &a->revert_window, &a->revert_return);
     XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
@@ -322,6 +375,8 @@ void app_open(App *a, const char **paths, size_t count) {
     a->uniform_mouse = get_uniform(a->program, "mouse");
     a->uniform_offset = get_uniform(a->program, "offset");
     a->uniform_aspect = get_uniform(a->program, "aspect");
+    a->uniform_select_began = get_uniform(a->program, "select_began");
+    a->uniform_select_start = get_uniform(a->program, "select_start");
 }
 
 void app_draw(App *a) {
@@ -351,6 +406,12 @@ void app_draw(App *a) {
 
     glUniform1f(a->uniform_aspect, a->size.x / a->size.y);
 
+    glUniform1i(a->uniform_select_began, a->select_began);
+
+    const Vec2 select_start = vec2_div(
+        vec2_add(camera_world(&a->camera, a->select_start), vec2_scale(a->size, 0.5)), a->size);
+    glUniform2f(a->uniform_select_start, select_start.x, select_start.y);
+
     glBindVertexArray(a->vao);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
@@ -361,13 +422,36 @@ void app_loop(App *a) {
     double pt = get_time();
     while (True) {
         const double dt = get_time() - pt;
-        camera_update(&a->camera, &a->final, dt);
+        if (!a->select_snap_pending) camera_update(&a->camera, &a->final, dt);
         pt += dt;
 
         app_draw(a);
+        if (a->select_snap_pending) {
+            a->select_snap_pending--;
+            if (!a->select_snap_pending) {
+                const Vec2 start = {
+                    min(a->select_start.x, a->mouse.x),
+                    min(a->select_start.y, a->mouse.y),
+                };
+
+                const Vec2 size = vec2_sub(
+                    (Vec2){
+                        max(a->select_start.x, a->mouse.x),
+                        max(a->select_start.y, a->mouse.y),
+                    },
+                    start);
+
+                if (size.x != 0 && size.y != 0) {
+                    app_save_image(a, start, size);
+                    if (a->select_exit) return;
+                }
+            }
+        }
+
         while (XPending(a->display)) {
             XEvent e;
             XNextEvent(a->display, &e);
+            if (e.type != Expose && a->select_snap_pending) continue;
 
             switch (e.type) {
             case Expose:
@@ -393,35 +477,46 @@ void app_loop(App *a) {
             case ButtonPress:
                 switch (e.xbutton.button) {
                 case Button1:
-                    a->dragging = True;
                     a->mouse = (Vec2){e.xbutton.x, e.xbutton.y};
+                    if (a->select_on) {
+                        a->select_start = a->mouse;
+                        a->select_began = True;
+                    } else {
+                        a->dragging = True;
+                    }
                     break;
 
                 case Button2:
                     return;
 
                 case Button3:
-                    a->focus = !a->focus;
-                    if (a->focus) {
-                        a->final.flash = (Vec4){THONO_FLASHLIGHT_COLOR};
-                    } else {
-                        a->final.flash = (Vec4){1.0, 1.0, 1.0, 1.0};
+                    if (!a->select_on) {
+                        a->focus = !a->focus;
+                        if (a->focus) {
+                            a->final.flash = (Vec4){THONO_FLASHLIGHT_COLOR};
+                        } else {
+                            a->final.flash = (Vec4){1.0, 1.0, 1.0, 1.0};
+                        }
                     }
                     break;
 
                 case Button4:
-                    if (a->focus) {
-                        a->final.lens *= THONO_LENS_FACTOR;
-                    } else {
-                        app_zoom(a, THONO_ZOOM_FACTOR);
+                    if (!a->select_on) {
+                        if (a->focus) {
+                            a->final.lens *= THONO_LENS_FACTOR;
+                        } else {
+                            app_zoom(a, THONO_ZOOM_FACTOR);
+                        }
                     }
                     break;
 
                 case Button5:
-                    if (a->focus) {
-                        a->final.lens /= THONO_LENS_FACTOR;
-                    } else {
-                        app_zoom(a, 1.0 / THONO_ZOOM_FACTOR);
+                    if (!a->select_on) {
+                        if (a->focus) {
+                            a->final.lens /= THONO_LENS_FACTOR;
+                        } else {
+                            app_zoom(a, 1.0 / THONO_ZOOM_FACTOR);
+                        }
                     }
                     break;
                 }
@@ -429,7 +524,26 @@ void app_loop(App *a) {
 
             case ButtonRelease:
                 if (e.xbutton.button == Button1) {
-                    a->dragging = False;
+                    if (a->select_on) {
+                        a->select_on = False;
+                        a->select_began = False;
+
+                        XUngrabPointer(a->display, CurrentTime);
+                        XGrabPointer(
+                            a->display,
+                            a->window,
+                            True,
+                            0,
+                            GrabModeAsync,
+                            GrabModeAsync,
+                            None,
+                            None,
+                            CurrentTime);
+
+                        a->select_snap_pending = THONO_SELECTION_PENDING_FRAMES_SKIP;
+                    } else {
+                        a->dragging = False;
+                    }
                 }
                 break;
 
@@ -475,12 +589,27 @@ void app_loop(App *a) {
                     break;
 
                 case 'w': {
-                    XImage *wallpaper = app_snap_ximage(a);
+                    XImage *wallpaper = app_snap_ximage(a, (Vec2){0}, a->size);
                     if (a->wallpaper) {
                         XDestroyImage(a->wallpaper);
                     }
                     a->wallpaper = wallpaper;
                 } break;
+
+                case 'r':
+                    a->select_on = !a->select_on;
+                    XUngrabPointer(a->display, CurrentTime);
+                    XGrabPointer(
+                        a->display,
+                        a->window,
+                        True,
+                        0,
+                        GrabModeAsync,
+                        GrabModeAsync,
+                        None,
+                        a->select_on ? a->select_cursor : None,
+                        CurrentTime);
+                    break;
                 }
                 break;
             }
@@ -502,6 +631,7 @@ void app_exit(App *a) {
     XUngrabKeyboard(a->display, CurrentTime);
     XUngrabPointer(a->display, CurrentTime);
     XDestroyWindow(a->display, a->window);
+    XFreeCursor(a->display, a->select_cursor);
 
     app_wallpaper(a);
     XCloseDisplay(a->display);
@@ -615,16 +745,5 @@ void app_wallpaper(App *a) {
 }
 
 void app_screenshot(App *a) {
-    Pixel *image = app_snap(a);
-    const long long since = get_time() * 1000;
-
-    char buffer[64];
-    snprintf(buffer, sizeof(buffer), "thono-%lld.png", since);
-
-    if (!stbi_write_png(buffer, a->size.x, a->size.y, 4, image, a->size.x * sizeof(*image))) {
-        fprintf(stderr, "ERROR: Could not save screenshot to png\n");
-        exit(1);
-    }
-
-    free(image);
+    app_save_image(a, (Vec2){0}, a->size);
 }

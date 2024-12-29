@@ -42,6 +42,8 @@ typedef struct {
     GLint uniform_mouse;
     GLint uniform_offset;
     GLint uniform_aspect;
+    GLint uniform_select_began;
+    GLint uniform_select_start;
 
     Bool focus;
     Bool dragging;
@@ -56,6 +58,13 @@ typedef struct {
     DynamicArray(Image) images;
 
     XImage *wallpaper; // Owned
+
+    Bool select_on;    // Whether the selection mode is on
+    Bool select_exit;  // Whether the app should immediately exit after end of selection
+    Bool select_began; // Whether the actual selection has started yet
+    Vec2 select_start;
+    Cursor select_cursor;
+    size_t select_snap_pending;
 } App;
 
 void app_init(App *a);

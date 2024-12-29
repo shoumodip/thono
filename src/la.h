@@ -23,4 +23,7 @@ Vec4 vec4_sub(Vec4 a, Vec4 b);
 Vec4 vec4_mul(Vec4 a, Vec4 b);
 Vec4 vec4_scale(Vec4 a, float b);
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
+
 #endif // THONO_LA_H

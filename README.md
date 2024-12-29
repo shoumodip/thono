@@ -30,7 +30,14 @@ $ ./thono -s
 An optional delay in seconds can be provided
 
 ```console
-$ ./thono 5
+$ ./thono -s 5
+```
+
+A region of the screen can also be selected.
+
+```console
+$ ./thono -r
+$ ./thono -r 5 # With optional delay
 ```
 
 A screenshot can also be taken in "normal mode"
@@ -38,6 +45,7 @@ A screenshot can also be taken in "normal mode"
 | Action          | Description                                         |
 | --------------- | --------------------------------------------------- |
 | `s`             | Take a screenshot                                   |
+| `r`             | Select a region and take a screenshot               |
 
 ## Image Viewer Utility
 Thono can be used as a simple image viewer utility

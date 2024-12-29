@@ -24,7 +24,8 @@ static void usage(FILE *f) {
     fprintf(f, "    -h          Show this help message\n");
     fprintf(f, "    -w <image>  Set the wallpaper\n");
     fprintf(f, "    -W <image>  Set the wallpaper and create a restore script\n");
-    fprintf(f, "    -s [delay]  Take a screenshot and exit, with optional delay\n\n");
+    fprintf(f, "    -s [delay]  Take a screenshot and exit, with optional delay\n");
+    fprintf(f, "    -r [delay]  Select a region, screenshot and exit, with optional delay\n\n");
     fprintf(f, "Image:\n");
     fprintf(f, "    Thono can be used as an image viewer if an image path is provided\n");
 }
@@ -210,6 +211,29 @@ int main(int argc, const char **argv) {
             app_init(&app);
             app_screenshot(&app);
             XCloseDisplay(app.display);
+            return 0;
+        }
+
+        if (!strcmp(flag, "-r")) {
+            if (argc > 2) {
+                char *endptr;
+                const size_t delay = strtoul(argv[2], &endptr, 10);
+
+                if (*endptr != '\0' || (delay == ULONG_MAX && errno == ERANGE)) {
+                    fprintf(stderr, "ERROR: Invalid delay '%s'\n", argv[2]);
+                    return 1;
+                }
+
+                sleep(delay);
+            }
+
+            app_init(&app);
+
+            app.select_on = True;
+            app.select_exit = True;
+            app_open(&app, NULL, 0);
+            app_loop(&app);
+            app_exit(&app);
             return 0;
         }
 
