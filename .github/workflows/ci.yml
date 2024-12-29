@@ -15,7 +15,7 @@ jobs:
       - name: Build
         run: |
           sudo apt install libgl-dev
-          make
+          ./build.sh
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

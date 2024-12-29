@@ -54,12 +54,16 @@ typedef struct {
 
     size_t current;
     DynamicArray(Image) images;
+
+    XImage *wallpaper; // Owned
 } App;
 
 void app_init(App *a);
 void app_open(App *a, const char **paths, size_t count);
-void app_save(App *a);
 void app_loop(App *a);
 void app_exit(App *a);
+
+void app_wallpaper(App *a);
+void app_screenshot(App *a);
 
 #endif // THONO_APP_H

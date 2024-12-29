@@ -1,6 +1,8 @@
 #include <math.h>
 #include <sys/time.h>
 
+#include <X11/Xatom.h>
+
 #include "app.h"
 #include "config.h"
 
@@ -68,17 +70,23 @@ static void app_zoom(App *a, float factor) {
     a->final.offset = vec2_sub(a->mouse, vec2_scale(world, a->final.zoom));
 }
 
-static Pixel *app_snap(App *a) {
-    const uint width = a->size.x;
-    const uint height = a->size.y;
+static XImage *app_snap_ximage(App *a) {
     const Window root = DefaultRootWindow(a->display);
 
-    XImage *image = XGetImage(a->display, root, 0, 0, width, height, AllPlanes, ZPixmap);
+    XImage *image = XGetImage(a->display, root, 0, 0, a->size.x, a->size.y, AllPlanes, ZPixmap);
     if (!image) {
         fprintf(stderr, "ERROR: Could not capture screenshot\n");
         exit(1);
     }
 
+    return image;
+}
+
+static Pixel *app_snap(App *a) {
+    const uint width = a->size.x;
+    const uint height = a->size.y;
+
+    XImage *image = app_snap_ximage(a);
     Pixel *pixels = malloc(width * height * sizeof(Pixel));
     if (!pixels) {
         fprintf(stderr, "ERROR: Could not allocate screenshot buffer\n");
@@ -341,21 +349,6 @@ void app_draw(App *a) {
     glXSwapBuffers(a->display, a->window);
 }
 
-void app_save(App *a) {
-    Pixel *image = app_snap(a);
-    const long long since = get_time() * 1000;
-
-    char buffer[64];
-    snprintf(buffer, sizeof(buffer), "thono-%lld.png", since);
-
-    if (!stbi_write_png(buffer, a->size.x, a->size.y, 4, image, a->size.x * sizeof(*image))) {
-        fprintf(stderr, "ERROR: Could not save screenshot to png\n");
-        exit(1);
-    }
-
-    free(image);
-}
-
 void app_loop(App *a) {
     double pt = get_time();
     while (True) {
@@ -447,7 +440,7 @@ void app_loop(App *a) {
                     return;
 
                 case 's':
-                    app_save(a);
+                    app_screenshot(a);
                     break;
 
                 case '0':
@@ -472,6 +465,14 @@ void app_loop(App *a) {
                     }
                     app_load_image(a);
                     break;
+
+                case 'w': {
+                    XImage *wallpaper = app_snap_ximage(a);
+                    if (a->wallpaper) {
+                        XDestroyImage(a->wallpaper);
+                    }
+                    a->wallpaper = wallpaper;
+                } break;
                 }
                 break;
             }
@@ -493,10 +494,129 @@ void app_exit(App *a) {
     XUngrabKeyboard(a->display, CurrentTime);
     XUngrabPointer(a->display, CurrentTime);
     XDestroyWindow(a->display, a->window);
+
+    app_wallpaper(a);
     XCloseDisplay(a->display);
 
     for (size_t i = 0; i < a->images.count; i++) {
         free(a->images.data[i].data);
     }
     da_free(&a->images);
+}
+
+void app_wallpaper(App *a) {
+    if (!a->wallpaper) {
+        return;
+    }
+
+    // Because X11 is a pile of dogshit, the OFFICIAL way to set the wallpaper is to create a Pixmap
+    // and then leak the resources. Yes. I'm not kidding.
+    Display *display = XOpenDisplay(NULL);
+
+    const Window root = DefaultRootWindow(display);
+    const size_t width = a->size.x;
+    const size_t height = a->size.y;
+
+    Pixmap pixmap = XCreatePixmap(display, root, width, height, a->wallpaper->depth);
+    GC gc = XCreateGC(display, root, 0, NULL);
+
+    XPutImage(display, pixmap, gc, a->wallpaper, 0, 0, 0, 0, width, height);
+
+    {
+        int screen = DefaultScreen(display);
+        Atom atom_root = XInternAtom(display, "_XROOTMAP_ID", True);
+        Atom atom_eroot = XInternAtom(display, "ESETROOT_PMAP_ID", True);
+
+        if (atom_root != None && atom_eroot != None) {
+            Atom type;
+            int format;
+            unsigned long length, after;
+            unsigned char *data_root, *data_eroot;
+
+            XGetWindowProperty(
+                display,
+                root,
+                atom_root,
+                0L,
+                1L,
+                False,
+                AnyPropertyType,
+                &type,
+                &format,
+                &length,
+                &after,
+                &data_root);
+
+            if (type == XA_PIXMAP) {
+                XGetWindowProperty(
+                    display,
+                    root,
+                    atom_eroot,
+                    0L,
+                    1L,
+                    False,
+                    AnyPropertyType,
+                    &type,
+                    &format,
+                    &length,
+                    &after,
+                    &data_eroot);
+
+                if (data_root && data_eroot && type == XA_PIXMAP &&
+                    *((Pixmap *)data_root) == *((Pixmap *)data_eroot))
+                    XKillClient(display, *((Pixmap *)data_root));
+            }
+        }
+
+        atom_root = XInternAtom(display, "_XROOTPMAP_ID", False);
+        atom_eroot = XInternAtom(display, "ESETROOT_PMAP_ID", False);
+        if (atom_root != None && atom_eroot != None) {
+            XChangeProperty(
+                display,
+                root,
+                atom_root,
+                XA_PIXMAP,
+                32,
+                PropModeReplace,
+                (unsigned char *)&pixmap,
+                1);
+
+            XChangeProperty(
+                display,
+                root,
+                atom_eroot,
+                XA_PIXMAP,
+                32,
+                PropModeReplace,
+                (unsigned char *)&pixmap,
+                1);
+        }
+    }
+
+    XSetWindowBackgroundPixmap(display, root, pixmap);
+    XClearWindow(display, root);
+    XFlush(display);
+    XSync(display, False);
+    XKillClient(display, AllTemporary);
+    XSetCloseDownMode(display, RetainTemporary);
+    XDestroyImage(a->wallpaper);
+    XFreeGC(display, gc);
+    XCloseDisplay(display);
+
+    a->wallpaper = NULL;
+}
+
+void app_screenshot(App *a) {
+    Pixel *image = app_snap(a);
+    const long long since = get_time() * 1000;
+
+    char buffer[64];
+    snprintf(buffer, sizeof(buffer), "thono-%lld.png", since);
+
+    if (!stbi_write_png(buffer, a->size.x, a->size.y, 4, image, a->size.x * sizeof(*image))) {
+        fprintf(stderr, "ERROR: Could not save screenshot to png\n");
+        exit(1);
+    }
+
+    free(image);
 }
