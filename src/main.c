@@ -96,31 +96,31 @@ defer:
 
 static int wallpaper_restore(App *a, const char *path) {
     int result = 0;
-    DynamicArray(char) restore = {0};
+    DynamicArray(char) b = {0};
 
     result = wallpaper(a, path);
     if (result) return_defer(result);
 
     const char *env_restore_path = getenv("THONO_WALLPAPER_RESTORE_PATH");
     if (env_restore_path) {
-        da_append_cstr(&restore, env_restore_path);
-        da_append(&restore, '\0');
+        da_append_cstr(&b, env_restore_path);
+        da_append(&b, '\0');
     } else {
         const char *env_home = getenv("HOME");
         if (!env_home) return_defer(result);
 
-        da_append_cstr(&restore, env_home);
-        da_append(&restore, '/');
-        da_append_cstr(&restore, THONO_WALLPAPER_RESTORE_PATH_DEFAULT);
-        da_append(&restore, '\0');
+        da_append_cstr(&b, env_home);
+        da_append(&b, '/');
+        da_append_cstr(&b, THONO_WALLPAPER_RESTORE_PATH_DEFAULT);
+        da_append(&b, '\0');
     }
 
-    const size_t program = restore.count;
+    const size_t program = b.count;
     while (True) {
-        da_append_many(&restore, NULL, DA_INIT_CAP);
+        da_append_many(&b, NULL, DA_INIT_CAP);
 
-        const size_t capacity = restore.capacity - program;
-        const long count = readlink("/proc/self/exe", restore.data + program, capacity);
+        const size_t capacity = b.capacity - program;
+        const long count = readlink("/proc/self/exe", b.data + program, capacity);
 
         if (count < 0) {
             fprintf(stderr, "ERROR: Could not get current program path\n");
@@ -128,17 +128,37 @@ static int wallpaper_restore(App *a, const char *path) {
         }
 
         if (count < capacity) {
-            restore.count += count;
+            b.count += count;
             break;
         }
 
-        restore.count = restore.capacity;
+        b.count = b.capacity;
     }
-    da_append(&restore, '\0');
+    da_append(&b, '\0');
 
-    FILE *f = fopen(restore.data, "w");
+    const size_t wallpaper = b.count;
+    if (*path != '/') {
+        da_append_many(&b, NULL, DA_INIT_CAP);
+        while (!getcwd(b.data + wallpaper, b.capacity - wallpaper)) {
+            if (errno != ERANGE) {
+                fprintf(stderr, "ERROR: Could not get current working directory\n");
+                return_defer(1);
+            }
+
+            b.count = b.capacity;
+            da_append_many(&b, NULL, DA_INIT_CAP);
+        }
+
+        b.count = wallpaper + strlen(b.data + wallpaper);
+        da_append(&b, '/');
+    }
+
+    da_append_cstr(&b, path);
+    da_append(&b, '\0');
+
+    FILE *f = fopen(b.data, "w");
     if (!f) {
-        fprintf(stderr, "ERROR: Could not create wallpaper restore script '%s'\n", restore.data);
+        fprintf(stderr, "ERROR: Could not create wallpaper restore script '%s'\n", b.data);
         return_defer(result);
     }
 
@@ -146,23 +166,21 @@ static int wallpaper_restore(App *a, const char *path) {
         f,
         "#!/bin/sh\n"
         "%s -w %s\n",
-        restore.data + program,
-        path);
+        b.data + program,
+        b.data + wallpaper);
 
     fclose(f);
 
-    if (chmod(restore.data, 0755) == -1) {
+    if (chmod(b.data, 0755) == -1) {
         fprintf(
-            stderr,
-            "ERROR: Could not mark wallpaper restore script '%s' as executable\n",
-            restore.data);
+            stderr, "ERROR: Could not mark wallpaper restore script '%s' as executable\n", b.data);
         return_defer(result);
     }
 
-    printf("Created wallpaper restore script '%s'\n", restore.data);
+    printf("Created wallpaper restore script '%s'\n", b.data);
 
 defer:
-    da_free(&restore);
+    da_free(&b);
     return result;
 }
 
