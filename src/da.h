@@ -59,4 +59,6 @@
         }                                                                                          \
     } while (0)
 
+#define da_append_cstr(l, s) da_append_many(l, s, strlen(s))
+
 #endif // DA_H

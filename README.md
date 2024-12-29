@@ -65,3 +65,20 @@ The wallpaper can also be set in "normal mode"
 | Action          | Description                                         |
 | --------------- | --------------------------------------------------- |
 | `w`             | Take screenshot and set wallpaper                   |
+
+The wallpaper can also be restored later if the `-W` (capital) flag is used
+
+```console
+$ ./thono -W <image>
+Created wallpaper restore script '/home/<user>/.local/share/wallpaper'
+$ ~/.local/share/wallpaper
+```
+
+The path of the restore script can be customized via the
+`THONO_WALLPAPER_RESTORE_PATH` environment variable
+
+```console
+$ THONO_WALLPAPER_RESTORE_PATH=~/.thonobg ./thono -W <image>
+Created wallpaper restore script '/home/<user>/.thonobg'
+$ ~/.thonobg
+```

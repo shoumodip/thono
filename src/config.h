@@ -9,4 +9,6 @@
 #define THONO_FLASHLIGHT_COLOR 0.2, 0.2, 0.2, 1.0
 #define THONO_BACKGROUND_COLOR (0x20 / 255.0), (0x20 / 255.0), (0x20 / 255.0), 1.0
 
+#define THONO_WALLPAPER_RESTORE_PATH ".local/share/wallpaper"
+
 #endif // THONO_CONFIG_H

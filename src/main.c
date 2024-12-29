@@ -1,10 +1,13 @@
-#include <errno.h>
-#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 
+#include <errno.h>
+#include <limits.h>
+#include <sys/stat.h>
+
 #include "app.h"
+#include "config.h"
 #include "stb_image.h"
 #include "stb_image_resize2.h"
 
@@ -20,6 +23,7 @@ static void usage(FILE *f) {
     fprintf(f, "Flags:\n");
     fprintf(f, "    -h          Show this help message\n");
     fprintf(f, "    -w <image>  Set the wallpaper\n");
+    fprintf(f, "    -W <image>  Set the wallpaper and create a restore script\n");
     fprintf(f, "    -s [delay]  Take a screenshot and exit, with optional delay\n\n");
     fprintf(f, "Image:\n");
     fprintf(f, "    Thono can be used as an image viewer if an image path is provided\n");
@@ -90,6 +94,73 @@ defer:
     return result;
 }
 
+static int wallpaper_restore(App *a, const char *path, const char *program) {
+    int result = 0;
+    DynamicArray(char) restore = {0};
+
+    result = wallpaper(a, path);
+    if (result) return_defer(result);
+
+    const char *env_restore_path = getenv("THONO_WALLPAPER_RESTORE_PATH");
+    if (env_restore_path) {
+        da_append_cstr(&restore, env_restore_path);
+        da_append(&restore, '\0');
+    } else {
+        const char *env_home = getenv("HOME");
+        if (!env_home) return_defer(result);
+
+        da_append_cstr(&restore, env_home);
+        da_append(&restore, '/');
+        da_append_cstr(&restore, THONO_WALLPAPER_RESTORE_PATH);
+        da_append(&restore, '\0');
+    }
+
+    const size_t cwd = restore.count;
+
+    da_append_many(&restore, NULL, DA_INIT_CAP);
+    while (!getcwd(restore.data + cwd, restore.capacity - cwd)) {
+        if (errno != ERANGE) {
+            fprintf(
+                stderr, "ERROR: Could not create wallpaper restore script '%s'\n", restore.data);
+            return_defer(1);
+        }
+
+        restore.count = restore.capacity;
+        da_append_many(&restore, NULL, DA_INIT_CAP);
+    }
+    restore.count = cwd + strlen(restore.data + cwd);
+
+    FILE *f = fopen(restore.data, "w");
+    if (!f) {
+        fprintf(stderr, "ERROR: Could not create wallpaper restore script '%s'\n", restore.data);
+        return_defer(result);
+    }
+
+    fprintf(
+        f,
+        "#!/bin/sh\n"
+        "%s/%s -w %s\n",
+        restore.data + cwd,
+        program,
+        path);
+
+    fclose(f);
+
+    if (chmod(restore.data, 0755) == -1) {
+        fprintf(
+            stderr,
+            "ERROR: Could not mark wallpaper restore script '%s' as executable\n",
+            restore.data);
+        return_defer(result);
+    }
+
+    printf("Created wallpaper restore script '%s'\n", restore.data);
+
+defer:
+    da_free(&restore);
+    return result;
+}
+
 int main(int argc, const char **argv) {
     App app = {0};
 
@@ -127,6 +198,16 @@ int main(int argc, const char **argv) {
             }
 
             return wallpaper(&app, argv[2]);
+        }
+
+        if (!strcmp(flag, "-W")) {
+            if (argc == 2) {
+                fprintf(stderr, "ERROR: Wallpaper image not provided\n");
+                fprintf(stderr, "Usage: thono -W <image>\n");
+                return 1;
+            }
+
+            return wallpaper_restore(&app, argv[2], argv[0]);
         }
     }
 
