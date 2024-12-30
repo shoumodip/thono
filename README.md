@@ -1,5 +1,5 @@
 # Thono
-Zoomer in C
+Image Utility in C
 
 ## Quick Start
 Depends on Xlib and OpenGL
