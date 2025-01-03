@@ -7,7 +7,7 @@
 #define THONO_LENS_FACTOR 1.2
 
 #define THONO_SELECTION_COLOR 0.7, 0.7, 0.7, 1.0
-#define THONO_FLASHLIGHT_COLOR 0.2, 0.2, 0.2, 1.0
+#define THONO_FLASHLIGHT_COLOR 0.0, 0.0, 0.0, 0.8
 #define THONO_BACKGROUND_COLOR (0x20 / 255.0), (0x20 / 255.0), (0x20 / 255.0), 1.0
 
 #define THONO_WALLPAPER_RESTORE_PATH_DEFAULT ".local/share/wallpaper"

@@ -32,18 +32,21 @@ typedef struct {
     GLuint vao;
     GLuint vbo;
     GLuint ebo;
-    GLuint program;
     GLuint texture;
     GLXContext glx_context;
 
-    GLint uniform_lens;
-    GLint uniform_zoom;
-    GLint uniform_flash;
-    GLint uniform_mouse;
-    GLint uniform_offset;
-    GLint uniform_aspect;
-    GLint uniform_select_began;
-    GLint uniform_select_start;
+    GLuint image_program;
+    GLint image_uniform_zoom;
+    GLint image_uniform_offset;
+
+    GLuint overlay_program;
+    GLint overlay_uniform_lens;
+    GLint overlay_uniform_flash;
+    GLint overlay_uniform_mouse;
+    GLint overlay_uniform_aspect;
+    GLint overlay_uniform_select_began;
+    GLint overlay_uniform_select_mouse;
+    GLint overlay_uniform_select_start;
 
     Bool focus;
     Bool dragging;

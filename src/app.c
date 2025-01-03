@@ -10,7 +10,7 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
-static const char *vs_source = //
+static const char *image_vs = //
     "#version 330 core\n"
     "layout (location = 0) in vec2 pos;\n"
     "layout (location = 1) in vec2 uv;\n"
@@ -26,36 +26,66 @@ static const char *vs_source = //
     "    texcoord = uv;\n"
     "}\n";
 
+static const char *image_fs = //
+    "#version 330 core\n"
+    "\n"
+    "in vec2 texcoord;\n"
+    "out vec4 color;\n"
+    "\n"
+    "uniform sampler2D image;\n"
+    "\n"
+    "void main()\n"
+    "{\n"
+    "    color = texture(image, texcoord);\n"
+    "}\n";
+
+static const char *overlay_vs = //
+    "#version 330 core\n"
+    "layout (location = 0) in vec2 pos;\n"
+    "layout (location = 1) in vec2 uv;\n"
+    "\n"
+    "out vec2 texcoord;\n"
+    "\n"
+    "void main()\n"
+    "{\n"
+    "    gl_Position = vec4(pos, 0.0, 1.0);\n"
+    "    texcoord = uv;\n"
+    "}\n";
+
 #define STRINGIFY(x) #x
 #define TO_STRING(x) STRINGIFY(x)
 #define SEL_COLOR TO_STRING(vec4(THONO_SELECTION_COLOR))
 
-static const char *fs_source = //
+static const char *overlay_fs = //
     "#version 330 core\n"
     "\n"
     "in vec2 texcoord;\n"
     "out vec4 color;\n"
     "\n"
     "uniform float lens;\n"
-    "uniform float zoom;\n"
     "uniform vec4 flash;\n"
     "uniform vec2 mouse;\n"
-    "uniform vec2 offset;\n"
     "uniform float aspect;\n"
-    "uniform sampler2D image;\n"
     "\n"
     "uniform bool select_began;\n"
+    "uniform vec2 select_mouse;\n"
     "uniform vec2 select_start;\n"
     "\n"
     "void main()\n"
     "{\n"
-    "    color = texture(image, texcoord);\n"
-    "    if (length((mouse - texcoord) * vec2(aspect, 1.0)) >= lens / zoom) {\n"
-    "        color *= flash;\n"
+    "    color = vec4(1.0, 1.0, 1.0, 0.0);\n"
+    "    if (length((mouse - texcoord) * vec2(aspect, 1.0)) >= lens) {\n"
+    "        color = flash;\n"
     "    }\n"
     "    if (select_began) {\n"
-    "        vec2 a = vec2(min(mouse.x, select_start.x), min(mouse.y, select_start.y));\n"
-    "        vec2 b = vec2(max(mouse.x, select_start.x), max(mouse.y, select_start.y));\n"
+    "        vec2 a = vec2(\n"
+    "            min(select_mouse.x, select_start.x),\n"
+    "            min(select_mouse.y, select_start.y));\n"
+    "\n"
+    "        vec2 b = vec2(\n"
+    "            max(select_mouse.x, select_start.x),\n"
+    "            max(select_mouse.y, select_start.y));\n"
+    "\n"
     "        if (a.x <= texcoord.x && texcoord.x <= b.x) {\n"
     "            if (abs(texcoord.y - a.y) < 0.001 || abs(texcoord.y - b.y) < 0.001) {\n"
     "                color = " SEL_COLOR ";\n"
@@ -87,7 +117,7 @@ static void app_zero(App *a) {
     a->focus = False;
     a->final.lens = THONO_LENS_SIZE;
     a->final.zoom = 1.0;
-    a->final.flash = (Vec4){1.0, 1.0, 1.0, 1.0};
+    a->final.flash = (Vec4){0};
     a->final.offset = vec2_scale(a->size, 0.5);
 }
 
@@ -331,8 +361,18 @@ void app_open(App *a, const char **paths, size_t count) {
     XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
     XSelectInput(a->display, root, SubstructureNotifyMask);
 
-    a->program = compile_program(vs_source, fs_source);
-    glUseProgram(a->program);
+    a->image_program = compile_program(image_vs, image_fs);
+    a->image_uniform_zoom = get_uniform(a->image_program, "zoom");
+    a->image_uniform_offset = get_uniform(a->image_program, "offset");
+
+    a->overlay_program = compile_program(overlay_vs, overlay_fs);
+    a->overlay_uniform_lens = get_uniform(a->overlay_program, "lens");
+    a->overlay_uniform_flash = get_uniform(a->overlay_program, "flash");
+    a->overlay_uniform_mouse = get_uniform(a->overlay_program, "mouse");
+    a->overlay_uniform_aspect = get_uniform(a->overlay_program, "aspect");
+    a->overlay_uniform_select_began = get_uniform(a->overlay_program, "select_began");
+    a->overlay_uniform_select_mouse = get_uniform(a->overlay_program, "select_mouse");
+    a->overlay_uniform_select_start = get_uniform(a->overlay_program, "select_start");
 
     glGenVertexArrays(1, &a->vao);
     glGenBuffers(1, &a->vbo);
@@ -367,53 +407,58 @@ void app_open(App *a, const char **paths, size_t count) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    app_load_image(a, True);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    a->uniform_lens = get_uniform(a->program, "lens");
-    a->uniform_zoom = get_uniform(a->program, "zoom");
-    a->uniform_flash = get_uniform(a->program, "flash");
-    a->uniform_mouse = get_uniform(a->program, "mouse");
-    a->uniform_offset = get_uniform(a->program, "offset");
-    a->uniform_aspect = get_uniform(a->program, "aspect");
-    a->uniform_select_began = get_uniform(a->program, "select_began");
-    a->uniform_select_start = get_uniform(a->program, "select_start");
+    app_load_image(a, True);
 }
 
 void app_draw(App *a) {
-    const Vec4 bg = vec4_mul(a->camera.flash, (Vec4){THONO_BACKGROUND_COLOR});
-    glClearColor(bg.x, bg.y, bg.z, bg.w);
+    glClearColor(THONO_BACKGROUND_COLOR);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    glBindTexture(GL_TEXTURE_2D, a->texture);
+    {
+        glUseProgram(a->image_program);
+        glUniform1f(a->image_uniform_zoom, a->camera.zoom);
+        glUniform2f(
+            a->image_uniform_offset,
+            2.0 * a->camera.offset.x / a->size.x - 1.0,
+            1.0 - 2.0 * a->camera.offset.y / a->size.y);
 
-    glUniform1f(a->uniform_lens, a->camera.lens);
-    glUniform1f(a->uniform_zoom, a->camera.zoom);
-    glUniform4f(
-        a->uniform_flash,
-        a->camera.flash.x,
-        a->camera.flash.y,
-        a->camera.flash.z,
-        a->camera.flash.w);
+        glBindTexture(GL_TEXTURE_2D, a->texture);
+        glBindVertexArray(a->vao);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    }
 
-    const Vec2 mouse =
-        vec2_div(vec2_add(camera_world(&a->camera, a->mouse), vec2_scale(a->size, 0.5)), a->size);
-    glUniform2f(a->uniform_mouse, mouse.x, mouse.y);
+    {
+        glUseProgram(a->overlay_program);
 
-    glUniform2f(
-        a->uniform_offset,
-        2.0 * a->camera.offset.x / a->size.x - 1.0,
-        1.0 - 2.0 * a->camera.offset.y / a->size.y);
+        glUniform1f(a->overlay_uniform_lens, a->camera.lens);
+        glUniform4f(
+            a->overlay_uniform_flash,
+            a->camera.flash.x,
+            a->camera.flash.y,
+            a->camera.flash.z,
+            a->camera.flash.w);
 
-    glUniform1f(a->uniform_aspect, a->size.x / a->size.y);
+        glUniform1f(a->overlay_uniform_aspect, a->size.x / a->size.y);
+        glUniform1i(a->overlay_uniform_select_began, a->select_began);
 
-    glUniform1i(a->uniform_select_began, a->select_began);
+        if (a->select_on) {
+            glUniform2f(
+                a->overlay_uniform_select_mouse, a->mouse.x / a->size.x, a->mouse.y / a->size.y);
+        } else {
+            glUniform2f(a->overlay_uniform_mouse, a->mouse.x / a->size.x, a->mouse.y / a->size.y);
+        }
 
-    const Vec2 select_start = vec2_div(
-        vec2_add(camera_world(&a->camera, a->select_start), vec2_scale(a->size, 0.5)), a->size);
-    glUniform2f(a->uniform_select_start, select_start.x, select_start.y);
+        glUniform2f(
+            a->overlay_uniform_select_start,
+            a->select_start.x / a->size.x,
+            a->select_start.y / a->size.y);
 
-    glBindVertexArray(a->vao);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glBindVertexArray(a->vao);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    }
 
     glXSwapBuffers(a->display, a->window);
 }
@@ -495,7 +540,7 @@ void app_loop(App *a) {
                         if (a->focus) {
                             a->final.flash = (Vec4){THONO_FLASHLIGHT_COLOR};
                         } else {
-                            a->final.flash = (Vec4){1.0, 1.0, 1.0, 1.0};
+                            a->final.flash = (Vec4){0};
                         }
                     }
                     break;
@@ -621,7 +666,8 @@ void app_exit(App *a) {
     glDeleteVertexArrays(1, &a->vao);
     glDeleteBuffers(1, &a->vbo);
     glDeleteBuffers(1, &a->ebo);
-    glDeleteProgram(a->program);
+    glDeleteProgram(a->image_program);
+    glDeleteProgram(a->overlay_program);
     glDeleteTextures(1, &a->texture);
 
     glXMakeCurrent(a->display, None, NULL);
