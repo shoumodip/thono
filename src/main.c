@@ -117,7 +117,7 @@ static int wallpaper_restore(App *a, const char *path) {
     }
 
     const size_t program = b.count;
-    while (True) {
+    while (true) {
         da_append_many(&b, NULL, DA_INIT_CAP);
 
         const size_t capacity = b.capacity - program;
@@ -229,8 +229,8 @@ int main(int argc, const char **argv) {
 
             app_init(&app);
 
-            app.select_on = True;
-            app.select_exit = True;
+            app.select_on = true;
+            app.select_exit = true;
             app_open(&app, NULL, 0);
             app_loop(&app);
             app_exit(&app);

@@ -1,9 +1,11 @@
 #ifndef THONO_APP_H
 #define THONO_APP_H
 
-#include "camera.h"
 #include "da.h"
 #include "gl.h"
+
+#include "camera.h"
+#include "shader.h"
 
 #include <GL/glx.h>
 
@@ -40,16 +42,18 @@ typedef struct {
     GLint image_uniform_offset;
 
     GLuint overlay_program;
-    GLint overlay_uniform_lens;
-    GLint overlay_uniform_flash;
     GLint overlay_uniform_mouse;
     GLint overlay_uniform_aspect;
+
+    GLint overlay_uniform_lens_size;
+    GLint overlay_uniform_lens_color;
+
     GLint overlay_uniform_select_began;
     GLint overlay_uniform_select_mouse;
     GLint overlay_uniform_select_start;
 
-    Bool focus;
-    Bool dragging;
+    bool focus;
+    bool dragging;
 
     Vec2 size;
     Vec2 mouse;
@@ -62,9 +66,9 @@ typedef struct {
 
     XImage *wallpaper; // Owned
 
-    Bool select_on;    // Whether the selection mode is on
-    Bool select_exit;  // Whether the app should immediately exit after end of selection
-    Bool select_began; // Whether the actual selection has started yet
+    bool select_on;    // Whether the selection mode is on
+    bool select_exit;  // Whether the app should immediately exit after end of selection
+    bool select_began; // Whether the actual selection has started yet
     Vec2 select_start;
     Cursor select_cursor;
     size_t select_snap_pending;

@@ -4,9 +4,10 @@
 #include "la.h"
 
 typedef struct {
-    Vec4 flash;
+    float lens_size;
+    Vec4 lens_color;
+
     Vec2 offset;
-    float lens;
     float zoom;
 } Camera;
 

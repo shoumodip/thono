@@ -10,100 +10,6 @@
 #include "stb_image.h"
 #include "stb_image_write.h"
 
-static const char *image_vs = //
-    "#version 330 core\n"
-    "layout (location = 0) in vec2 pos;\n"
-    "layout (location = 1) in vec2 uv;\n"
-    "\n"
-    "out vec2 texcoord;\n"
-    "\n"
-    "uniform float zoom;\n"
-    "uniform vec2 offset;\n"
-    "\n"
-    "void main()\n"
-    "{\n"
-    "    gl_Position = vec4(pos * zoom + offset, 0.0, 1.0);\n"
-    "    texcoord = uv;\n"
-    "}\n";
-
-static const char *image_fs = //
-    "#version 330 core\n"
-    "\n"
-    "in vec2 texcoord;\n"
-    "out vec4 color;\n"
-    "\n"
-    "uniform sampler2D image;\n"
-    "\n"
-    "void main()\n"
-    "{\n"
-    "    color = texture(image, texcoord);\n"
-    "}\n";
-
-static const char *overlay_vs = //
-    "#version 330 core\n"
-    "layout (location = 0) in vec2 pos;\n"
-    "layout (location = 1) in vec2 uv;\n"
-    "\n"
-    "out vec2 texcoord;\n"
-    "\n"
-    "void main()\n"
-    "{\n"
-    "    gl_Position = vec4(pos, 0.0, 1.0);\n"
-    "    texcoord = uv;\n"
-    "}\n";
-
-#define STRINGIFY(x) #x
-#define TO_STRING(x) STRINGIFY(x)
-#define SEL_COLOR TO_STRING(vec4(THONO_SELECTION_COLOR))
-
-static const char *overlay_fs = //
-    "#version 330 core\n"
-    "\n"
-    "in vec2 texcoord;\n"
-    "out vec4 color;\n"
-    "\n"
-    "uniform float lens;\n"
-    "uniform vec4 flash;\n"
-    "uniform vec2 mouse;\n"
-    "uniform float aspect;\n"
-    "\n"
-    "uniform bool select_began;\n"
-    "uniform vec2 select_mouse;\n"
-    "uniform vec2 select_start;\n"
-    "\n"
-    "void main()\n"
-    "{\n"
-    "    color = vec4(1.0, 1.0, 1.0, 0.0);\n"
-    "    if (length((mouse - texcoord) * vec2(aspect, 1.0)) >= lens) {\n"
-    "        color = flash;\n"
-    "    }\n"
-    "    if (select_began) {\n"
-    "        vec2 a = vec2(\n"
-    "            min(select_mouse.x, select_start.x),\n"
-    "            min(select_mouse.y, select_start.y));\n"
-    "\n"
-    "        vec2 b = vec2(\n"
-    "            max(select_mouse.x, select_start.x),\n"
-    "            max(select_mouse.y, select_start.y));\n"
-    "\n"
-    "        if (a.x <= texcoord.x && texcoord.x <= b.x) {\n"
-    "            if (abs(texcoord.y - a.y) < 0.001 || abs(texcoord.y - b.y) < 0.001) {\n"
-    "                color = " SEL_COLOR ";\n"
-    "            }\n"
-    "        }\n"
-    "        if (a.y <= texcoord.y && texcoord.y <= b.y) {\n"
-    "            if (aspect * abs(texcoord.x - a.x) < 0.001 ||\n"
-    "                aspect * abs(texcoord.x - b.x) < 0.001) {\n"
-    "                color = " SEL_COLOR ";\n"
-    "            }\n"
-    "        }\n"
-    "    }\n"
-    "}\n";
-
-#undef SELECTION_COLOR_WRAPPED
-#undef STRINGIFY
-#undef TO_STRING
-
 static double get_time(void) {
     struct timeval time = {0};
     if (gettimeofday(&time, NULL) < 0) {
@@ -114,10 +20,11 @@ static double get_time(void) {
 }
 
 static void app_zero(App *a) {
-    a->focus = False;
-    a->final.lens = THONO_LENS_SIZE;
+    a->focus = false;
+    a->final.lens_size = THONO_LENS_SIZE;
+    a->final.lens_color = (Vec4){0};
+
     a->final.zoom = 1.0;
-    a->final.flash = (Vec4){0};
     a->final.offset = vec2_scale(a->size, 0.5);
 }
 
@@ -182,8 +89,8 @@ static void app_save_image(App *a, Vec2 start, Vec2 size) {
     free(image);
 }
 
-static void app_load_image(App *a, Bool next_if_failed) {
-    while (True) {
+static void app_load_image(App *a, bool next_if_failed) {
+    while (true) {
         Image *image = &a->images.data[a->current];
         if (image->path) {
             int w, h;
@@ -286,6 +193,10 @@ void app_open(App *a, const char **paths, size_t count) {
     app_zero(a);
     a->camera = a->final;
 
+    if (!shader_init()) {
+        exit(1);
+    }
+
     {
         int x = 0, y = 0;
         unsigned int mask;
@@ -324,8 +235,8 @@ void app_open(App *a, const char **paths, size_t count) {
     wa.event_mask = ButtonPressMask | ButtonReleaseMask | KeyPressMask | PointerMotionMask |
                     ExposureMask | VisibilityChangeMask | FocusChangeMask;
 
-    wa.override_redirect = True;
-    wa.save_under = True;
+    wa.override_redirect = true;
+    wa.save_under = true;
 
     a->window = XCreateWindow(
         a->display,
@@ -345,11 +256,11 @@ void app_open(App *a, const char **paths, size_t count) {
     glXMakeCurrent(a->display, a->window, a->glx_context);
 
     XMapRaised(a->display, a->window);
-    XGrabKeyboard(a->display, root, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+    XGrabKeyboard(a->display, root, true, GrabModeAsync, GrabModeAsync, CurrentTime);
     XGrabPointer(
         a->display,
         a->window,
-        True,
+        true,
         0,
         GrabModeAsync,
         GrabModeAsync,
@@ -366,13 +277,18 @@ void app_open(App *a, const char **paths, size_t count) {
     a->image_uniform_offset = get_uniform(a->image_program, "offset");
 
     a->overlay_program = compile_program(overlay_vs, overlay_fs);
-    a->overlay_uniform_lens = get_uniform(a->overlay_program, "lens");
-    a->overlay_uniform_flash = get_uniform(a->overlay_program, "flash");
     a->overlay_uniform_mouse = get_uniform(a->overlay_program, "mouse");
     a->overlay_uniform_aspect = get_uniform(a->overlay_program, "aspect");
+
+    a->overlay_uniform_lens_size = get_uniform(a->overlay_program, "lens_size");
+    a->overlay_uniform_lens_color = get_uniform(a->overlay_program, "lens_color");
+
     a->overlay_uniform_select_began = get_uniform(a->overlay_program, "select_began");
     a->overlay_uniform_select_mouse = get_uniform(a->overlay_program, "select_mouse");
     a->overlay_uniform_select_start = get_uniform(a->overlay_program, "select_start");
+
+    glUseProgram(a->overlay_program);
+    glUniform4f(get_uniform(a->overlay_program, "select_color"), THONO_SELECTION_COLOR);
 
     glGenVertexArrays(1, &a->vao);
     glGenBuffers(1, &a->vbo);
@@ -410,7 +326,7 @@ void app_open(App *a, const char **paths, size_t count) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    app_load_image(a, True);
+    app_load_image(a, true);
 }
 
 void app_draw(App *a) {
@@ -433,13 +349,13 @@ void app_draw(App *a) {
     {
         glUseProgram(a->overlay_program);
 
-        glUniform1f(a->overlay_uniform_lens, a->camera.lens);
+        glUniform1f(a->overlay_uniform_lens_size, a->camera.lens_size);
         glUniform4f(
-            a->overlay_uniform_flash,
-            a->camera.flash.x,
-            a->camera.flash.y,
-            a->camera.flash.z,
-            a->camera.flash.w);
+            a->overlay_uniform_lens_color,
+            a->camera.lens_color.x,
+            a->camera.lens_color.y,
+            a->camera.lens_color.z,
+            a->camera.lens_color.w);
 
         glUniform1f(a->overlay_uniform_aspect, a->size.x / a->size.y);
         glUniform1i(a->overlay_uniform_select_began, a->select_began);
@@ -465,7 +381,7 @@ void app_draw(App *a) {
 
 void app_loop(App *a) {
     double pt = get_time();
-    while (True) {
+    while (true) {
         const double dt = get_time() - pt;
         if (!a->select_snap_pending) camera_update(&a->camera, &a->final, dt);
         pt += dt;
@@ -525,9 +441,9 @@ void app_loop(App *a) {
                     a->mouse = (Vec2){e.xbutton.x, e.xbutton.y};
                     if (a->select_on) {
                         a->select_start = a->mouse;
-                        a->select_began = True;
+                        a->select_began = true;
                     } else {
-                        a->dragging = True;
+                        a->dragging = true;
                     }
                     break;
 
@@ -538,9 +454,9 @@ void app_loop(App *a) {
                     if (!a->select_on) {
                         a->focus = !a->focus;
                         if (a->focus) {
-                            a->final.flash = (Vec4){THONO_FLASHLIGHT_COLOR};
+                            a->final.lens_color = (Vec4){THONO_FLASHLIGHT_COLOR};
                         } else {
-                            a->final.flash = (Vec4){0};
+                            a->final.lens_color = (Vec4){0};
                         }
                     }
                     break;
@@ -548,7 +464,7 @@ void app_loop(App *a) {
                 case Button4:
                     if (!a->select_on) {
                         if (a->focus) {
-                            a->final.lens *= THONO_LENS_FACTOR;
+                            a->final.lens_size *= THONO_LENS_FACTOR;
                         } else {
                             app_zoom(a, THONO_ZOOM_FACTOR);
                         }
@@ -558,7 +474,7 @@ void app_loop(App *a) {
                 case Button5:
                     if (!a->select_on) {
                         if (a->focus) {
-                            a->final.lens /= THONO_LENS_FACTOR;
+                            a->final.lens_size /= THONO_LENS_FACTOR;
                         } else {
                             app_zoom(a, 1.0 / THONO_ZOOM_FACTOR);
                         }
@@ -570,14 +486,14 @@ void app_loop(App *a) {
             case ButtonRelease:
                 if (e.xbutton.button == Button1) {
                     if (a->select_on) {
-                        a->select_on = False;
-                        a->select_began = False;
+                        a->select_on = false;
+                        a->select_began = false;
 
                         XUngrabPointer(a->display, CurrentTime);
                         XGrabPointer(
                             a->display,
                             a->window,
-                            True,
+                            true,
                             0,
                             GrabModeAsync,
                             GrabModeAsync,
@@ -587,7 +503,7 @@ void app_loop(App *a) {
 
                         a->select_snap_pending = THONO_SELECTION_PENDING_FRAMES_SKIP;
                     } else {
-                        a->dragging = False;
+                        a->dragging = false;
                     }
                 }
                 break;
@@ -620,7 +536,7 @@ void app_loop(App *a) {
                     if (a->current >= a->images.count) {
                         a->current = 0;
                     }
-                    app_load_image(a, True);
+                    app_load_image(a, true);
                     break;
 
                 case 'p':
@@ -630,7 +546,7 @@ void app_loop(App *a) {
                     } else {
                         a->current = a->images.count - 1;
                     }
-                    app_load_image(a, False);
+                    app_load_image(a, false);
                     break;
 
                 case 'w': {
@@ -647,7 +563,7 @@ void app_loop(App *a) {
                     XGrabPointer(
                         a->display,
                         a->window,
-                        True,
+                        true,
                         0,
                         GrabModeAsync,
                         GrabModeAsync,
@@ -686,6 +602,8 @@ void app_exit(App *a) {
         free(a->images.data[i].data);
     }
     da_free(&a->images);
+
+    shader_free();
 }
 
 void app_wallpaper(App *a) {
@@ -708,8 +626,8 @@ void app_wallpaper(App *a) {
 
     {
         int screen = DefaultScreen(display);
-        Atom atom_root = XInternAtom(display, "_XROOTMAP_ID", True);
-        Atom atom_eroot = XInternAtom(display, "ESETROOT_PMAP_ID", True);
+        Atom atom_root = XInternAtom(display, "_XROOTMAP_ID", true);
+        Atom atom_eroot = XInternAtom(display, "ESETROOT_PMAP_ID", true);
 
         if (atom_root != None && atom_eroot != None) {
             Atom type;
@@ -723,7 +641,7 @@ void app_wallpaper(App *a) {
                 atom_root,
                 0L,
                 1L,
-                False,
+                false,
                 AnyPropertyType,
                 &type,
                 &format,
@@ -738,7 +656,7 @@ void app_wallpaper(App *a) {
                     atom_eroot,
                     0L,
                     1L,
-                    False,
+                    false,
                     AnyPropertyType,
                     &type,
                     &format,
@@ -752,8 +670,8 @@ void app_wallpaper(App *a) {
             }
         }
 
-        atom_root = XInternAtom(display, "_XROOTPMAP_ID", False);
-        atom_eroot = XInternAtom(display, "ESETROOT_PMAP_ID", False);
+        atom_root = XInternAtom(display, "_XROOTPMAP_ID", false);
+        atom_eroot = XInternAtom(display, "ESETROOT_PMAP_ID", false);
         if (atom_root != None && atom_eroot != None) {
             XChangeProperty(
                 display,
@@ -780,7 +698,7 @@ void app_wallpaper(App *a) {
     XSetWindowBackgroundPixmap(display, root, pixmap);
     XClearWindow(display, root);
     XFlush(display);
-    XSync(display, False);
+    XSync(display, false);
     XKillClient(display, AllTemporary);
     XSetCloseDownMode(display, RetainTemporary);
     XDestroyImage(a->wallpaper);

@@ -5,7 +5,7 @@ Image Utility in C
 Depends on Xlib and OpenGL
 
 ```console
-$ ./build.sh
+$ ./release.sh
 $ ./thono
 ```
 
