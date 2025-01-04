@@ -6,7 +6,7 @@
 #define ZOOM_FACTOR 1.1
 #define LENS_FACTOR 1.2
 
-#define SELECTION_COLOR 0.7, 0.7, 0.7, 1.0
+#define SELECTION_COLOR 0.6, 0.6, 0.6, 1.0
 #define FLASHLIGHT_COLOR 0.0, 0.0, 0.0, 0.8
 #define BACKGROUND_COLOR (0x20 / 255.0), (0x20 / 255.0), (0x20 / 255.0), 1.0
 

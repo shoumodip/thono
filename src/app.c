@@ -570,6 +570,29 @@ void app_loop(App *a) {
                         None,
                         a->select_on ? a->select_cursor : None,
                         CurrentTime);
+
+                    if (!a->select_on) {
+                        a->select_began = false;
+                    }
+                    break;
+
+                case XK_Escape:
+                    if (a->select_on) {
+                        a->select_on = false;
+                        a->select_began = false;
+
+                        XUngrabPointer(a->display, CurrentTime);
+                        XGrabPointer(
+                            a->display,
+                            a->window,
+                            true,
+                            0,
+                            GrabModeAsync,
+                            GrabModeAsync,
+                            None,
+                            None,
+                            CurrentTime);
+                    }
                     break;
                 }
                 break;
