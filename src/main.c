@@ -11,12 +11,6 @@
 #include "stb_image.h"
 #include "stb_image_resize2.h"
 
-#define return_defer(value)                                                                        \
-    do {                                                                                           \
-        result = (value);                                                                          \
-        goto defer;                                                                                \
-    } while (0)
-
 static void usage(FILE *f) {
     fprintf(f, "Usage:\n");
     fprintf(f, "    thono [FLAG] [IMAGES]...\n\n");
@@ -112,7 +106,7 @@ static int wallpaper_restore(App *a, const char *path) {
 
         da_append_cstr(&b, env_home);
         da_append(&b, '/');
-        da_append_cstr(&b, THONO_WALLPAPER_RESTORE_PATH_DEFAULT);
+        da_append_cstr(&b, WALLPAPER_RESTORE_PATH_DEFAULT);
         da_append(&b, '\0');
     }
 

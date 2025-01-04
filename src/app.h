@@ -1,5 +1,5 @@
-#ifndef THONO_APP_H
-#define THONO_APP_H
+#ifndef APP_H
+#define APP_H
 
 #include "da.h"
 #include "gl.h"
@@ -82,4 +82,4 @@ void app_exit(App *a);
 void app_wallpaper(App *a);
 void app_screenshot(App *a);
 
-#endif // THONO_APP_H
+#endif // APP_H

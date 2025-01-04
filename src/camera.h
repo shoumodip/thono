@@ -1,5 +1,5 @@
-#ifndef THONO_CAMERA_H
-#define THONO_CAMERA_H
+#ifndef CAMERA_H
+#define CAMERA_H
 
 #include "la.h"
 
@@ -14,4 +14,4 @@ typedef struct {
 Vec2 camera_world(const Camera *c, Vec2 v);
 void camera_update(Camera *c, const Camera *final, float dt);
 
-#endif // THONO_CAMERA_H
+#endif // CAMERA_H

@@ -21,7 +21,7 @@ static double get_time(void) {
 
 static void app_zero(App *a) {
     a->focus = false;
-    a->final.lens_size = THONO_LENS_SIZE;
+    a->final.lens_size = LENS_SIZE;
     a->final.lens_color = (Vec4){0};
 
     a->final.zoom = 1.0;
@@ -143,7 +143,7 @@ static void app_load_image(App *a, bool next_if_failed) {
                     if (i >= x && i < x + w && j >= y && j < y + h) {
                         image->data[j * (size_t)image->width + i] = data[(j - y) * w + (i - x)];
                     } else {
-                        const Vec4 c = vec4_scale((Vec4){THONO_BACKGROUND_COLOR}, 0xFF);
+                        const Vec4 c = vec4_scale((Vec4){BACKGROUND_COLOR}, 0xFF);
                         image->data[j * (size_t)image->width + i] = (Pixel){c.x, c.y, c.z, c.w};
                     }
                 }
@@ -288,7 +288,7 @@ void app_open(App *a, const char **paths, size_t count) {
     a->overlay_uniform_select_start = get_uniform(a->overlay_program, "select_start");
 
     glUseProgram(a->overlay_program);
-    glUniform4f(get_uniform(a->overlay_program, "select_color"), THONO_SELECTION_COLOR);
+    glUniform4f(get_uniform(a->overlay_program, "select_color"), SELECTION_COLOR);
 
     glGenVertexArrays(1, &a->vao);
     glGenBuffers(1, &a->vbo);
@@ -330,7 +330,7 @@ void app_open(App *a, const char **paths, size_t count) {
 }
 
 void app_draw(App *a) {
-    glClearColor(THONO_BACKGROUND_COLOR);
+    glClearColor(BACKGROUND_COLOR);
     glClear(GL_COLOR_BUFFER_BIT);
 
     {
@@ -360,7 +360,7 @@ void app_draw(App *a) {
         glUniform1f(a->overlay_uniform_aspect, a->size.x / a->size.y);
         glUniform1i(a->overlay_uniform_select_began, a->select_began);
 
-        if (a->select_on) {
+        if (a->select_on || a->select_snap_pending) {
             glUniform2f(
                 a->overlay_uniform_select_mouse, a->mouse.x / a->size.x, a->mouse.y / a->size.y);
         } else {
@@ -454,7 +454,7 @@ void app_loop(App *a) {
                     if (!a->select_on) {
                         a->focus = !a->focus;
                         if (a->focus) {
-                            a->final.lens_color = (Vec4){THONO_FLASHLIGHT_COLOR};
+                            a->final.lens_color = (Vec4){FLASHLIGHT_COLOR};
                         } else {
                             a->final.lens_color = (Vec4){0};
                         }
@@ -464,9 +464,9 @@ void app_loop(App *a) {
                 case Button4:
                     if (!a->select_on) {
                         if (a->focus) {
-                            a->final.lens_size *= THONO_LENS_FACTOR;
+                            a->final.lens_size *= LENS_FACTOR;
                         } else {
-                            app_zoom(a, THONO_ZOOM_FACTOR);
+                            app_zoom(a, ZOOM_FACTOR);
                         }
                     }
                     break;
@@ -474,9 +474,9 @@ void app_loop(App *a) {
                 case Button5:
                     if (!a->select_on) {
                         if (a->focus) {
-                            a->final.lens_size /= THONO_LENS_FACTOR;
+                            a->final.lens_size /= LENS_FACTOR;
                         } else {
-                            app_zoom(a, 1.0 / THONO_ZOOM_FACTOR);
+                            app_zoom(a, 1.0 / ZOOM_FACTOR);
                         }
                     }
                     break;
@@ -501,7 +501,7 @@ void app_loop(App *a) {
                             None,
                             CurrentTime);
 
-                        a->select_snap_pending = THONO_SELECTION_PENDING_FRAMES_SKIP;
+                        a->select_snap_pending = SELECTION_PENDING_FRAMES_SKIP;
                     } else {
                         a->dragging = false;
                     }

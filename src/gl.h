@@ -1,5 +1,5 @@
-#ifndef THONO_GL_H
-#define THONO_GL_H
+#ifndef GL_H
+#define GL_H
 
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
@@ -9,4 +9,4 @@ GLint get_uniform(GLuint program, const char *name);
 GLuint compile_shader(const char *source, GLenum type);
 GLuint compile_program(const char *vs_source, const char *fs_source);
 
-#endif // THONO_GL_H
+#endif // GL_H

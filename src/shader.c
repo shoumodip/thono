@@ -1,6 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-
 #include "shader.h"
 
 #ifdef RELEASE
@@ -26,13 +23,11 @@ bool shader_init(void) {
 }
 
 void shader_free(void) {}
+
 #else
 
-#    define return_defer(value)                                                                    \
-        do {                                                                                       \
-            result = (value);                                                                      \
-            goto defer;                                                                            \
-        } while (0)
+#    include <stdio.h>
+#    include <stdlib.h>
 
 static char *read_file(const char *path) {
     char *result = NULL;

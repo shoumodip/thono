@@ -1,5 +1,5 @@
-#ifndef THONO_LA_H
-#define THONO_LA_H
+#ifndef LA_H
+#define LA_H
 
 typedef struct {
     float x;
@@ -26,4 +26,4 @@ Vec4 vec4_scale(Vec4 a, float b);
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
-#endif // THONO_LA_H
+#endif // LA_H
