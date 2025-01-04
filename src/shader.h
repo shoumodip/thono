@@ -3,12 +3,6 @@
 
 #include <stdbool.h>
 
-#define return_defer(value)                                                                        \
-    do {                                                                                           \
-        result = (value);                                                                          \
-        goto defer;                                                                                \
-    } while (0)
-
 bool shader_init(void);
 void shader_free(void);
 

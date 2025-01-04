@@ -7,7 +7,9 @@
 #include <sys/stat.h>
 
 #include "app.h"
+#include "basic.h"
 #include "config.h"
+
 #include "stb_image.h"
 #include "stb_image_resize2.h"
 
