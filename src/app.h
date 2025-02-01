@@ -26,24 +26,24 @@ typedef struct {
 
 typedef struct {
     Display *display;
-    Window window;
+    Window   window;
 
-    int revert_return;
+    int    revert_return;
     Window revert_window;
 
-    GLuint vao;
-    GLuint vbo;
-    GLuint ebo;
-    GLuint texture;
+    GLuint     vao;
+    GLuint     vbo;
+    GLuint     ebo;
+    GLuint     texture;
     GLXContext glx_context;
 
     GLuint image_program;
-    GLint image_uniform_zoom;
-    GLint image_uniform_offset;
+    GLint  image_uniform_zoom;
+    GLint  image_uniform_offset;
 
     GLuint overlay_program;
-    GLint overlay_uniform_mouse;
-    GLint overlay_uniform_aspect;
+    GLint  overlay_uniform_mouse;
+    GLint  overlay_uniform_aspect;
 
     GLint overlay_uniform_lens_size;
     GLint overlay_uniform_lens_color;
@@ -64,12 +64,15 @@ typedef struct {
     size_t current;
     DynamicArray(Image) images;
 
+    bool recursive;
+    DynamicArray(char) paths;
+
     XImage *wallpaper; // Owned
 
-    bool select_on;    // Whether the selection mode is on
-    bool select_exit;  // Whether the app should immediately exit after end of selection
-    bool select_began; // Whether the actual selection has started yet
-    Vec2 select_start;
+    bool   select_on;    // Whether the selection mode is on
+    bool   select_exit;  // Whether the app should immediately exit after end of selection
+    bool   select_began; // Whether the actual selection has started yet
+    Vec2   select_start;
     Cursor select_cursor;
     size_t select_snap_pending;
 } App;

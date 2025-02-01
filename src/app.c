@@ -1,10 +1,15 @@
+#include <dirent.h>
+#include <errno.h>
+
 #include <math.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 
 #include <X11/Xatom.h>
 #include <X11/cursorfont.h>
 
 #include "app.h"
+#include "basic.h"
 #include "config.h"
 
 #include "stb_image.h"
@@ -22,7 +27,7 @@ static double get_time(void) {
 static void app_zero(App *a) {
     a->focus = false;
     a->final.lens_size = LENS_SIZE;
-    a->final.lens_color = (Vec4){0};
+    a->final.lens_color = (Vec4) {0};
 
     a->final.zoom = 1.0;
     a->final.offset = vec2_scale(a->size, 0.5);
@@ -53,7 +58,7 @@ static Pixel *app_snap(App *a, Vec2 start, Vec2 size) {
     const uint height = size.y;
 
     XImage *image = app_snap_ximage(a, start, size);
-    Pixel *pixels = malloc(width * height * sizeof(Pixel));
+    Pixel  *pixels = malloc(width * height * sizeof(Pixel));
     if (!pixels) {
         fprintf(stderr, "ERROR: Could not allocate screenshot buffer\n");
         exit(1);
@@ -62,7 +67,7 @@ static Pixel *app_snap(App *a, Vec2 start, Vec2 size) {
     for (uint y = 0; y < height; ++y) {
         for (uint x = 0; x < width; ++x) {
             const ulong p = XGetPixel(image, x, y);
-            Pixel *it = &pixels[y * width + x];
+            Pixel      *it = &pixels[y * width + x];
             it->r = (p & image->red_mask) >> 16;
             it->g = (p & image->green_mask) >> 8;
             it->b = (p & image->blue_mask);
@@ -75,7 +80,7 @@ static Pixel *app_snap(App *a, Vec2 start, Vec2 size) {
 }
 
 static void app_save_image(App *a, Vec2 start, Vec2 size) {
-    Pixel *image = app_snap(a, start, size);
+    Pixel          *image = app_snap(a, start, size);
     const long long since = get_time() * 1000;
 
     char buffer[64];
@@ -93,8 +98,8 @@ static void app_load_image(App *a, bool next_if_failed) {
     while (true) {
         Image *image = &a->images.data[a->current];
         if (image->path) {
-            int w, h;
-            Pixel *data = (Pixel *)stbi_load(image->path, &w, &h, NULL, 4);
+            int    w, h;
+            Pixel *data = (Pixel *) stbi_load(image->path, &w, &h, NULL, 4);
             if (!data) {
                 fprintf(stderr, "ERROR: Could not load image '%s'\n", image->path);
 
@@ -122,8 +127,8 @@ static void app_load_image(App *a, bool next_if_failed) {
             image->width = a->size.x;
             image->height = a->size.y;
             if (w > image->width || h > image->height) {
-                const float ax = (float)w / image->width;
-                const float ay = (float)h / image->height;
+                const float ax = (float) w / image->width;
+                const float ay = (float) h / image->height;
                 const float scale = ax > ay ? ax : ay;
 
                 image->width = floor(image->width * scale);
@@ -141,10 +146,10 @@ static void app_load_image(App *a, bool next_if_failed) {
             for (size_t j = 0; j < image->height; ++j) {
                 for (size_t i = 0; i < image->width; ++i) {
                     if (i >= x && i < x + w && j >= y && j < y + h) {
-                        image->data[j * (size_t)image->width + i] = data[(j - y) * w + (i - x)];
+                        image->data[j * (size_t) image->width + i] = data[(j - y) * w + (i - x)];
                     } else {
-                        const Vec4 c = vec4_scale((Vec4){BACKGROUND_COLOR}, 0xFF);
-                        image->data[j * (size_t)image->width + i] = (Pixel){c.x, c.y, c.z, c.w};
+                        const Vec4 c = vec4_scale((Vec4) {BACKGROUND_COLOR}, 0xFF);
+                        image->data[j * (size_t) image->width + i] = (Pixel) {c.x, c.y, c.z, c.w};
                     }
                 }
             }
@@ -172,6 +177,86 @@ static void app_load_image(App *a, bool next_if_failed) {
     a->camera = a->final;
 }
 
+static int compare_images(const void *a, const void *b) {
+    const Image *ia = a;
+    const Image *ib = b;
+    return strcmp(ia->path, ib->path);
+}
+
+static_assert(sizeof(size_t) == sizeof(const char *), "Use a proper computer bruh");
+static bool app_load_dir(App *a, const char *path, bool top) {
+    errno = 0;
+    DIR *dir = NULL;
+    bool result = true;
+
+    dir = opendir(path);
+    if (!dir) {
+        fprintf(stderr, "ERROR: Could not read directory '%s'\n", path);
+        return_defer(false);
+    }
+
+    const size_t   start = a->images.count;
+    struct dirent *e;
+    while ((e = readdir(dir))) {
+        if (!strcmp(e->d_name, "..") || !strcmp(e->d_name, ".")) {
+            continue;
+        }
+
+        if (e->d_type == DT_DIR && !a->recursive) {
+            continue;
+        }
+
+        const size_t copied = a->paths.count;
+        da_append_cstr(&a->paths, path);
+        da_append(&a->paths, '/');
+        da_append_cstr(&a->paths, e->d_name);
+        da_append(&a->paths, '\0');
+
+        if (e->d_type == DT_DIR) {
+            app_load_dir(a, a->paths.data + copied, false);
+        } else {
+            da_append(&a->images, (Image) {.path = (const char *) copied});
+        }
+    }
+
+    if (errno) {
+        fprintf(stderr, "ERROR: Could not read directory '%s'\n", path);
+        return_defer(false);
+    }
+
+    if (top) {
+        for (size_t i = start; i < a->images.count; i++) {
+            a->images.data[i].path = a->paths.data + (size_t) a->images.data[i].path;
+        }
+
+        qsort(
+            a->images.data + start,
+            a->images.count - start,
+            sizeof(*a->images.data),
+            compare_images);
+    }
+
+defer:
+    closedir(dir);
+    return result;
+}
+
+static void app_load_path(App *a, const char *path) {
+    struct stat statbuf = {0};
+    if (stat(path, &statbuf) < 0) {
+        fprintf(stderr, "ERROR: Could not stat file '%s'\n", path);
+        return;
+    }
+
+    if (S_ISDIR(statbuf.st_mode)) {
+        if (!app_load_dir(a, path, true)) {
+            return;
+        }
+    } else {
+        da_append(&a->images, (Image) {.path = path});
+    }
+}
+
 void app_init(App *a) {
     a->display = XOpenDisplay(NULL);
     if (!a->display) {
@@ -181,7 +266,7 @@ void app_init(App *a) {
 
     XWindowAttributes wa = {0};
     XGetWindowAttributes(a->display, DefaultRootWindow(a->display), &wa);
-    a->size = (Vec2){wa.width, wa.height};
+    a->size = (Vec2) {wa.width, wa.height};
 }
 
 typedef struct {
@@ -198,30 +283,30 @@ void app_open(App *a, const char **paths, size_t count) {
     }
 
     {
-        int x = 0, y = 0;
-        unsigned int mask;
+        int  x = 0, y = 0;
+        uint mask;
 
         Window root = DefaultRootWindow(a->display);
         XQueryPointer(a->display, root, &root, &root, &x, &y, &x, &y, &mask);
 
-        a->mouse = (Vec2){x, y};
+        a->mouse = (Vec2) {x, y};
         a->select_cursor = XCreateFontCursor(a->display, XC_crosshair);
     }
 
     if (count) {
         for (size_t i = 0; i < count; i++) {
-            da_append(&a->images, (Image){.path = paths[i]});
+            app_load_path(a, paths[i]);
         }
     } else {
         const Image image = {
-            .data = app_snap(a, (Vec2){0}, a->size),
+            .data = app_snap(a, (Vec2) {0}, a->size),
             .width = a->size.x,
             .height = a->size.y,
         };
         da_append(&a->images, image);
     }
 
-    GLint glx_attribs[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 24, None};
+    GLint        glx_attribs[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_DEPTH_SIZE, 24, None};
     XVisualInfo *vi = glXChooseVisual(a->display, 0, glx_attribs);
     if (!vi) {
         fprintf(stderr, "ERROR: No appropriate visual found\n");
@@ -309,10 +394,10 @@ void app_open(App *a, const char **paths, size_t count) {
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, a->ebo);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, pos));
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *) offsetof(Vertex, pos));
     glEnableVertexAttribArray(0);
 
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, uv));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *) offsetof(Vertex, uv));
     glEnableVertexAttribArray(1);
 
     glGenTextures(1, &a->texture);
@@ -396,7 +481,7 @@ void app_loop(App *a) {
                 };
 
                 const Vec2 size = vec2_sub(
-                    (Vec2){
+                    (Vec2) {
                         max(a->select_start.x, a->mouse.x),
                         max(a->select_start.y, a->mouse.y),
                     },
@@ -424,13 +509,13 @@ void app_loop(App *a) {
                 break;
 
             case VisibilityNotify:
-                if (((XVisibilityEvent *)&e)->state != VisibilityUnobscured) {
+                if (((XVisibilityEvent *) &e)->state != VisibilityUnobscured) {
                     XRaiseWindow(a->display, a->window);
                 }
                 break;
 
             case ConfigureNotify:
-                if (((XConfigureEvent *)&e)->window != a->window) {
+                if (((XConfigureEvent *) &e)->window != a->window) {
                     XRaiseWindow(a->display, a->window);
                 }
                 break;
@@ -438,7 +523,7 @@ void app_loop(App *a) {
             case ButtonPress:
                 switch (e.xbutton.button) {
                 case Button1:
-                    a->mouse = (Vec2){e.xbutton.x, e.xbutton.y};
+                    a->mouse = (Vec2) {e.xbutton.x, e.xbutton.y};
                     if (a->select_on) {
                         a->select_start = a->mouse;
                         a->select_began = true;
@@ -454,9 +539,9 @@ void app_loop(App *a) {
                     if (!a->select_on) {
                         a->focus = !a->focus;
                         if (a->focus) {
-                            a->final.lens_color = (Vec4){FLASHLIGHT_COLOR};
+                            a->final.lens_color = (Vec4) {FLASHLIGHT_COLOR};
                         } else {
-                            a->final.lens_color = (Vec4){0};
+                            a->final.lens_color = (Vec4) {0};
                         }
                     }
                     break;
@@ -509,7 +594,7 @@ void app_loop(App *a) {
                 break;
 
             case MotionNotify: {
-                const Vec2 pos = (Vec2){e.xmotion.x, e.xmotion.y};
+                const Vec2 pos = (Vec2) {e.xmotion.x, e.xmotion.y};
                 if (a->dragging) {
                     a->final.offset = vec2_add(a->final.offset, vec2_sub(pos, a->mouse));
                     a->camera.offset = a->final.offset;
@@ -550,7 +635,7 @@ void app_loop(App *a) {
                     break;
 
                 case 'w': {
-                    XImage *wallpaper = app_snap_ximage(a, (Vec2){0}, a->size);
+                    XImage *wallpaper = app_snap_ximage(a, (Vec2) {0}, a->size);
                     if (a->wallpaper) {
                         XDestroyImage(a->wallpaper);
                     }
@@ -625,6 +710,7 @@ void app_exit(App *a) {
         free(a->images.data[i].data);
     }
     da_free(&a->images);
+    da_free(&a->paths);
 
     shader_free();
 }
@@ -643,19 +729,19 @@ void app_wallpaper(App *a) {
     const size_t height = a->size.y;
 
     Pixmap pixmap = XCreatePixmap(display, root, width, height, a->wallpaper->depth);
-    GC gc = XCreateGC(display, root, 0, NULL);
+    GC     gc = XCreateGC(display, root, 0, NULL);
 
     XPutImage(display, pixmap, gc, a->wallpaper, 0, 0, 0, 0, width, height);
 
     {
-        int screen = DefaultScreen(display);
+        int  screen = DefaultScreen(display);
         Atom atom_root = XInternAtom(display, "_XROOTMAP_ID", true);
         Atom atom_eroot = XInternAtom(display, "ESETROOT_PMAP_ID", true);
 
         if (atom_root != None && atom_eroot != None) {
-            Atom type;
-            int format;
-            unsigned long length, after;
+            Atom           type;
+            int            format;
+            unsigned long  length, after;
             unsigned char *data_root, *data_eroot;
 
             XGetWindowProperty(
@@ -688,8 +774,8 @@ void app_wallpaper(App *a) {
                     &data_eroot);
 
                 if (data_root && data_eroot && type == XA_PIXMAP &&
-                    *((Pixmap *)data_root) == *((Pixmap *)data_eroot))
-                    XKillClient(display, *((Pixmap *)data_root));
+                    *((Pixmap *) data_root) == *((Pixmap *) data_eroot))
+                    XKillClient(display, *((Pixmap *) data_root));
             }
         }
 
@@ -703,7 +789,7 @@ void app_wallpaper(App *a) {
                 XA_PIXMAP,
                 32,
                 PropModeReplace,
-                (unsigned char *)&pixmap,
+                (unsigned char *) &pixmap,
                 1);
 
             XChangeProperty(
@@ -713,7 +799,7 @@ void app_wallpaper(App *a) {
                 XA_PIXMAP,
                 32,
                 PropModeReplace,
-                (unsigned char *)&pixmap,
+                (unsigned char *) &pixmap,
                 1);
         }
     }
@@ -732,5 +818,5 @@ void app_wallpaper(App *a) {
 }
 
 void app_screenshot(App *a) {
-    app_save_image(a, (Vec2){0}, a->size);
+    app_save_image(a, (Vec2) {0}, a->size);
 }

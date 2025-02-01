@@ -15,22 +15,23 @@
 
 static void usage(FILE *f) {
     fprintf(f, "Usage:\n");
-    fprintf(f, "    thono [FLAG] [IMAGES]...\n\n");
+    fprintf(f, "    thono [FLAG] [PATHS]...\n\n");
     fprintf(f, "Flags:\n");
     fprintf(f, "    -h          Show this help message\n");
-    fprintf(f, "    -w <image>  Set the wallpaper\n");
-    fprintf(f, "    -W <image>  Set the wallpaper and create a restore script\n");
+    fprintf(f, "    -w <image>  Set the image as wallpaper\n");
+    fprintf(f, "    -W <image>  Set the image as wallpaper and create a restore script\n");
     fprintf(f, "    -s [delay]  Take a screenshot and exit, with optional delay\n");
-    fprintf(f, "    -r [delay]  Select a region, screenshot and exit, with optional delay\n\n");
+    fprintf(f, "    -r [delay]  Select a region, screenshot and exit, with optional delay\n");
+    fprintf(f, "    -R          Open images recursively in the image viewer\n\n");
     fprintf(f, "Image:\n");
-    fprintf(f, "    Thono can be used as an image viewer if an image path is provided\n");
+    fprintf(f, "    Thono can be used as an image viewer if image/directory paths are provided\n");
 }
 
 static int wallpaper(App *a, const char *path) {
-    int result = 0;
+    int      result = 0;
     uint8_t *image = NULL;
 
-    int w, h;
+    int      w, h;
     uint8_t *src = stbi_load(path, &w, &h, NULL, sizeof(uint32_t));
     if (!src) {
         fprintf(stderr, "ERROR: Could not load image '%s'\n", path);
@@ -74,9 +75,9 @@ static int wallpaper(App *a, const char *path) {
 
     for (size_t y = 0; y < height; y++) {
         for (size_t x = 0; x < width; x++) {
-            const uint8_t r = image[(y * width + x) * sizeof(uint32_t) + 0];
-            const uint8_t g = image[(y * width + x) * sizeof(uint32_t) + 1];
-            const uint8_t b = image[(y * width + x) * sizeof(uint32_t) + 2];
+            const uint8_t  r = image[(y * width + x) * sizeof(uint32_t) + 0];
+            const uint8_t  g = image[(y * width + x) * sizeof(uint32_t) + 1];
+            const uint8_t  b = image[(y * width + x) * sizeof(uint32_t) + 2];
             const uint32_t pixel = ((r & 0xff) << 16) | ((g & 0xff) << 8) | (b & 0xff);
             XPutPixel(a->wallpaper, x, y, pixel);
         }
@@ -117,7 +118,7 @@ static int wallpaper_restore(App *a, const char *path) {
         da_append_many(&b, NULL, DA_INIT_CAP);
 
         const size_t capacity = b.capacity - program;
-        const long count = readlink("/proc/self/exe", b.data + program, capacity);
+        const long   count = readlink("/proc/self/exe", b.data + program, capacity);
 
         if (count < 0) {
             fprintf(stderr, "ERROR: Could not get current program path\n");
@@ -183,17 +184,14 @@ defer:
 
 int main(int argc, const char **argv) {
     App app = {0};
-
     if (argc >= 2) {
         const char *flag = argv[1];
         if (!strcmp(flag, "-h")) {
             usage(stdout);
             return 0;
-        }
-
-        if (!strcmp(flag, "-s")) {
+        } else if (!strcmp(flag, "-s")) {
             if (argc > 2) {
-                char *endptr;
+                char        *endptr;
                 const size_t delay = strtoul(argv[2], &endptr, 10);
 
                 if (*endptr != '\0' || (delay == ULONG_MAX && errno == ERANGE)) {
@@ -208,11 +206,9 @@ int main(int argc, const char **argv) {
             app_screenshot(&app);
             XCloseDisplay(app.display);
             return 0;
-        }
-
-        if (!strcmp(flag, "-r")) {
+        } else if (!strcmp(flag, "-r")) {
             if (argc > 2) {
-                char *endptr;
+                char        *endptr;
                 const size_t delay = strtoul(argv[2], &endptr, 10);
 
                 if (*endptr != '\0' || (delay == ULONG_MAX && errno == ERANGE)) {
@@ -231,9 +227,7 @@ int main(int argc, const char **argv) {
             app_loop(&app);
             app_exit(&app);
             return 0;
-        }
-
-        if (!strcmp(flag, "-w")) {
+        } else if (!strcmp(flag, "-w")) {
             if (argc == 2) {
                 fprintf(stderr, "ERROR: Wallpaper image not provided\n");
                 fprintf(stderr, "Usage: thono -w <image>\n");
@@ -241,9 +235,7 @@ int main(int argc, const char **argv) {
             }
 
             return wallpaper(&app, argv[2]);
-        }
-
-        if (!strcmp(flag, "-W")) {
+        } else if (!strcmp(flag, "-W")) {
             if (argc == 2) {
                 fprintf(stderr, "ERROR: Wallpaper image not provided\n");
                 fprintf(stderr, "Usage: thono -W <image>\n");
@@ -251,6 +243,10 @@ int main(int argc, const char **argv) {
             }
 
             return wallpaper_restore(&app, argv[2]);
+        } else if (!strcmp(flag, "-R")) {
+            app.recursive = true;
+            argv++;
+            argc--;
         }
     }
 

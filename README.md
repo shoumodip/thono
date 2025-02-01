@@ -63,6 +63,14 @@ $ ./thono [IMAGES]...
 | `j`             | Next image                                          |
 | `k`             | Previous image                                      |
 
+Thono can load entire directories as well. If you want to open a directory
+recursively, pass the `-R` flag as the first argument before the directory
+paths
+
+```console
+$ ./thono -R [PATHS]...
+```
+
 ## Wallpaper Setter Utility
 Thono can be used as a simple wallpaper setter utility
 
