@@ -36,11 +36,11 @@ bool shader_init(void) {
 }
 
 void shader_free(void) {
-    free((char *)image_fs);
-    free((char *)image_vs);
+    free((char *) image_fs);
+    free((char *) image_vs);
 
-    free((char *)overlay_fs);
-    free((char *)overlay_vs);
+    free((char *) overlay_fs);
+    free((char *) overlay_vs);
 }
 
 #endif // RELEASE

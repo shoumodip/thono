@@ -21,7 +21,8 @@ typedef struct {
     size_t width;
     size_t height;
 
-    const char *path;
+    bool   read;
+    size_t path;
 } Image;
 
 typedef struct {

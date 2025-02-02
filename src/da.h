@@ -9,7 +9,7 @@
 
 #define DynamicArray(T)                                                                            \
     struct {                                                                                       \
-        T *data;                                                                                   \
+        T     *data;                                                                               \
         size_t count;                                                                              \
         size_t capacity;                                                                           \
     }

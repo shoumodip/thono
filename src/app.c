@@ -97,11 +97,13 @@ static void app_save_image(App *a, Vec2 start, Vec2 size) {
 static void app_load_image(App *a, bool next_if_failed) {
     while (true) {
         Image *image = &a->images.data[a->current];
-        if (image->path) {
+        if (image->read) {
+            const char *path = a->paths.data + image->path;
+
             int    w, h;
-            Pixel *data = (Pixel *) stbi_load(image->path, &w, &h, NULL, 4);
+            Pixel *data = (Pixel *) stbi_load(path, &w, &h, NULL, 4);
             if (!data) {
-                fprintf(stderr, "ERROR: Could not load image '%s'\n", image->path);
+                fprintf(stderr, "ERROR: Could not load image '%s'\n", path);
 
                 da_remove(&a->images, a->current);
                 if (a->images.count == 0) {
@@ -155,7 +157,7 @@ static void app_load_image(App *a, bool next_if_failed) {
             }
 
             stbi_image_free(data);
-            image->path = NULL;
+            image->read = false;
         }
 
         glTexImage2D(
@@ -177,10 +179,12 @@ static void app_load_image(App *a, bool next_if_failed) {
     a->camera = a->final;
 }
 
+static const char *compare_context;
+
 static int compare_images(const void *a, const void *b) {
     const Image *ia = a;
     const Image *ib = b;
-    return strcmp(ia->path, ib->path);
+    return strcmp(compare_context + ia->path, compare_context + ib->path);
 }
 
 static_assert(sizeof(size_t) == sizeof(const char *), "Use a proper computer bruh");
@@ -215,7 +219,7 @@ static bool app_load_dir(App *a, const char *path, bool top) {
         if (e->d_type == DT_DIR) {
             app_load_dir(a, a->paths.data + copied, false);
         } else {
-            da_append(&a->images, (Image) {.path = (const char *) copied});
+            da_append(&a->images, ((Image) {.path = copied, .read = true}));
         }
     }
 
@@ -225,10 +229,7 @@ static bool app_load_dir(App *a, const char *path, bool top) {
     }
 
     if (top) {
-        for (size_t i = start; i < a->images.count; i++) {
-            a->images.data[i].path = a->paths.data + (size_t) a->images.data[i].path;
-        }
-
+        compare_context = a->paths.data;
         qsort(
             a->images.data + start,
             a->images.count - start,
@@ -249,12 +250,14 @@ static void app_load_path(App *a, const char *path) {
     }
 
     if (S_ISDIR(statbuf.st_mode)) {
-        if (!app_load_dir(a, path, true)) {
-            return;
-        }
-    } else {
-        da_append(&a->images, (Image) {.path = path});
+        app_load_dir(a, path, true);
+        return;
     }
+
+    const size_t copied = a->paths.count;
+    da_append_cstr(&a->paths, path);
+    da_append(&a->paths, '\0');
+    da_append(&a->images, ((Image) {.path = copied, .read = true}));
 }
 
 void app_init(App *a) {

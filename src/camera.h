@@ -5,9 +5,9 @@
 
 typedef struct {
     float lens_size;
-    Vec4 lens_color;
+    Vec4  lens_color;
 
-    Vec2 offset;
+    Vec2  offset;
     float zoom;
 } Camera;
 
