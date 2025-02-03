@@ -76,6 +76,9 @@ typedef struct {
     Vec2   select_start;
     Cursor select_cursor;
     size_t select_snap_pending;
+
+    int  ipc_server_fd;
+    Atom ipc_message_atom;
 } App;
 
 void app_init(App *a);

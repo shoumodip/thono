@@ -1,9 +1,14 @@
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <libgen.h>
+#include <unistd.h>
 
 #include <math.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/un.h>
 
 #include <X11/Xatom.h>
 #include <X11/cursorfont.h>
@@ -278,6 +283,91 @@ typedef struct {
 } Vertex;
 
 void app_open(App *a, const char **paths, size_t count) {
+    if (access(IPC_LOCK_PATH, F_OK) == 0) {
+        // Client lock
+        if (!count) {
+            XCloseDisplay(a->display);
+            exit(0);
+        }
+
+        static char dirpath_buffer[] = IPC_WINDOW_PATH;
+        const char *dirpath = dirname(dirpath_buffer);
+
+        static char basepath_buffer[] = IPC_WINDOW_PATH;
+        const char *basepath = basename(basepath_buffer);
+
+        if (!wait_till_file_exists(dirpath, basepath, IPC_WINDOW_PATH)) {
+            fprintf(stderr, "ERROR: Could not wait for creation of '%s'\n", IPC_WINDOW_PATH);
+            exit(1);
+        }
+
+        FILE *f = fopen(IPC_WINDOW_PATH, "r");
+        if (!f) {
+            fprintf(stderr, "ERROR: Failed to read window ID of main instance\n");
+            exit(1);
+        }
+
+        Window window;
+        if (fscanf(f, "%lu", &window) != 1) {
+            fprintf(stderr, "ERROR: Failed to read window ID of main instance\n");
+            fclose(f);
+            exit(1);
+        }
+        fclose(f);
+
+        const int client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (client_fd == -1) {
+            fprintf(stderr, "ERROR: Could not create socket\n");
+            exit(1);
+        }
+
+        struct sockaddr_un server_addr = {
+            .sun_family = AF_UNIX,
+        };
+        strcpy(server_addr.sun_path, IPC_SOCKET_PATH);
+
+        if (connect(client_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) == -1) {
+            fprintf(stderr, "ERROR: Could not connect to socket\n");
+            close(client_fd);
+            exit(1);
+        }
+
+        for (size_t i = 0; i < count; i++) {
+            da_append_cstr(&a->paths, paths[i]);
+            da_append(&a->paths, '\0');
+        }
+
+        if (write(client_fd, a->paths.data, a->paths.count) == -1) {
+            fprintf(stderr, "ERROR: Could not write to socket\n");
+            da_free(&a->paths);
+            close(client_fd);
+            exit(1);
+        }
+        close(client_fd);
+
+        XEvent event = {0};
+        event.xclient.type = ClientMessage;
+        event.xclient.message_type = XInternAtom(a->display, IPC_MESSAGE_LOAD, False);
+        event.xclient.format = 32;
+        event.xclient.window = window;
+        event.xclient.data.l[0] = (long) a->paths.count;
+
+        XSendEvent(a->display, window, False, NoEventMask, &event);
+        XFlush(a->display);
+
+        da_free(&a->paths);
+        XCloseDisplay(a->display);
+        exit(0);
+    } else {
+        // Server lock
+        const int fd = creat(IPC_LOCK_PATH, S_IRUSR | S_IWUSR);
+        if (fd < 0) {
+            fprintf(stderr, "ERROR: Could not create lock path\n");
+            exit(1);
+        }
+        close(fd);
+    }
+
     app_zero(a);
     a->camera = a->final;
 
@@ -355,6 +445,44 @@ void app_open(App *a, const char **paths, size_t count) {
         None,
         a->select_on ? a->select_cursor : None,
         CurrentTime);
+
+    // Server instance
+    {
+        a->ipc_server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (a->ipc_server_fd == -1) {
+            fprintf(stderr, "ERROR: Could not create socket\n");
+            exit(1);
+        }
+
+        unlink(IPC_SOCKET_PATH);
+
+        struct sockaddr_un server_addr = {
+            .sun_family = AF_UNIX,
+        };
+        strcpy(server_addr.sun_path, IPC_SOCKET_PATH);
+
+        if (bind(a->ipc_server_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) == -1) {
+            fprintf(stderr, "ERROR: Could not bind socket\n");
+            close(a->ipc_server_fd);
+            exit(1);
+        }
+
+        if (listen(a->ipc_server_fd, 5) == -1) {
+            fprintf(stderr, "ERROR: Could not listen to socket\n");
+            close(a->ipc_server_fd);
+            exit(1);
+        }
+
+        a->ipc_message_atom = XInternAtom(a->display, IPC_MESSAGE_LOAD, False);
+
+        FILE *f = fopen(IPC_WINDOW_PATH, "w");
+        if (!f) {
+            fprintf(stderr, "ERROR: Failed to save window ID of main instance\n");
+            exit(1);
+        }
+        fprintf(f, "%lu\n", a->window);
+        fclose(f);
+    }
 
     XGetInputFocus(a->display, &a->revert_window, &a->revert_return);
     XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
@@ -509,6 +637,39 @@ void app_loop(App *a) {
 
             case FocusOut:
                 XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
+                break;
+
+            case ClientMessage:
+                if (!a->select_exit && e.xclient.message_type == a->ipc_message_atom) {
+                    const int client_fd = accept(a->ipc_server_fd, NULL, NULL);
+                    if (client_fd == -1) {
+                        fprintf(stderr, "ERROR: Could not accept client\n");
+                        continue;
+                    }
+                    const size_t size = (size_t) e.xclient.data.l[0];
+
+                    char *buffer = malloc(size);
+                    long  bytes = 0;
+                    while (bytes < size) {
+                        const long n = read(client_fd, buffer + bytes, size - bytes);
+                        if (n == -1) {
+                            fprintf(stderr, "ERROR: Could not read from socket\n");
+                            break;
+                        }
+                        bytes += n;
+                    }
+                    close(client_fd);
+
+                    if (bytes == size) {
+                        for (const char *p = buffer; p < buffer + size; p += strlen(p) + 1) {
+                            app_load_path(a, p);
+                        }
+                    } else {
+                        fprintf(stderr, "ERROR: Incomplete message (%zu/%zu)\n", bytes, size);
+                    }
+
+                    free(buffer);
+                }
                 break;
 
             case VisibilityNotify:
@@ -716,6 +877,11 @@ void app_exit(App *a) {
     da_free(&a->paths);
 
     shader_free();
+
+    close(a->ipc_server_fd);
+    unlink(IPC_LOCK_PATH);
+    unlink(IPC_WINDOW_PATH);
+    unlink(IPC_SOCKET_PATH);
 }
 
 void app_wallpaper(App *a) {
