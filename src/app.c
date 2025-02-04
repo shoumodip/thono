@@ -180,8 +180,8 @@ static void app_load_image(App *a, bool next_if_failed) {
         break;
     }
 
-    app_zero(a);
-    a->camera = a->final;
+    a->final.zoom = 1.0;
+    a->final.offset = vec2_scale(a->size, 0.5);
 }
 
 static const char *compare_context;
@@ -599,7 +599,7 @@ void app_loop(App *a) {
     double pt = get_time();
     while (true) {
         const double dt = get_time() - pt;
-        if (!a->select_snap_pending) camera_update(&a->camera, &a->final, dt);
+        if (!a->select_snap_pending) camera_update(&a->camera, &a->final, fmin(dt, 1.0 / FPS));
         pt += dt;
 
         app_draw(a);
