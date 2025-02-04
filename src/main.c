@@ -15,16 +15,23 @@
 
 static void usage(FILE *f) {
     fprintf(f, "Usage:\n");
-    fprintf(f, "    thono [FLAG] [PATHS]...\n\n");
+    fprintf(f, "  thono [FLAG] [PATHS]...\n\n");
     fprintf(f, "Flags:\n");
-    fprintf(f, "    -h          Show this help message\n");
-    fprintf(f, "    -w <image>  Set the image as wallpaper\n");
-    fprintf(f, "    -W <image>  Set the image as wallpaper and create a restore script\n");
-    fprintf(f, "    -s [delay]  Take a screenshot and exit, with optional delay\n");
-    fprintf(f, "    -r [delay]  Select a region, screenshot and exit, with optional delay\n");
-    fprintf(f, "    -R          Open images recursively in the image viewer\n\n");
-    fprintf(f, "Image:\n");
-    fprintf(f, "    Thono can be used as an image viewer if image/directory paths are provided\n");
+    fprintf(f, "  -h\n");
+    fprintf(f, "    Show this help message.\n\n");
+    fprintf(f, "  -w <image>\n");
+    fprintf(f, "    Set the image as wallpaper.\n\n");
+    fprintf(f, "  -W <image> <script>\n");
+    fprintf(f, "    Set the image as wallpaper and create a restore script.\n\n");
+    fprintf(f, "  -s [delay]\n");
+    fprintf(f, "    Take a screenshot and exit, with optional delay.\n\n");
+    fprintf(f, "  -r [delay]\n");
+    fprintf(f, "    Select a region, screenshot and exit, with optional delay.\n\n");
+    fprintf(f, "  -R\n");
+    fprintf(f, "    Open images recursively in the image viewer.\n\n");
+    fprintf(f, "Paths:\n");
+    fprintf(f, "  Thono can be used as an image viewer if image/directory paths are provided.\n");
+    fprintf(f, "  Otherwise it takes a screenshot of the screen and views that.\n");
 }
 
 static int wallpaper(App *a, const char *path) {
@@ -92,16 +99,15 @@ defer:
     return result;
 }
 
-static int wallpaper_restore(App *a, const char *path) {
+static int wallpaper_restore(App *a, const char *image_path, const char *script_path) {
     int result = 0;
     DynamicArray(char) b = {0};
 
-    result = wallpaper(a, path);
+    result = wallpaper(a, image_path);
     if (result) return_defer(result);
 
-    const char *env_restore_path = getenv("THONO_WALLPAPER_RESTORE_PATH");
-    if (env_restore_path) {
-        da_append_cstr(&b, env_restore_path);
+    if (script_path) {
+        da_append_cstr(&b, script_path);
         da_append(&b, '\0');
     } else {
         const char *env_home = getenv("HOME");
@@ -135,7 +141,7 @@ static int wallpaper_restore(App *a, const char *path) {
     da_append(&b, '\0');
 
     const size_t wallpaper = b.count;
-    if (*path != '/') {
+    if (*image_path != '/') {
         da_append_many(&b, NULL, DA_INIT_CAP);
         while (!getcwd(b.data + wallpaper, b.capacity - wallpaper)) {
             if (errno != ERANGE) {
@@ -151,7 +157,7 @@ static int wallpaper_restore(App *a, const char *path) {
         da_append(&b, '/');
     }
 
-    da_append_cstr(&b, path);
+    da_append_cstr(&b, image_path);
     da_append(&b, '\0');
 
     FILE *f = fopen(b.data, "w");
@@ -242,7 +248,7 @@ int main(int argc, const char **argv) {
                 return 1;
             }
 
-            return wallpaper_restore(&app, argv[2]);
+            return wallpaper_restore(&app, argv[2], argc > 3 ? argv[3] : NULL);
         } else if (!strcmp(flag, "-R")) {
             app.recursive = true;
             argv++;

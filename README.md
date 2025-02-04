@@ -92,11 +92,10 @@ Created wallpaper restore script '/home/<user>/.local/share/wallpaper'
 $ ~/.local/share/wallpaper
 ```
 
-The path of the restore script can be customized via the
-`THONO_WALLPAPER_RESTORE_PATH` environment variable
+The path of the restore script can be customized from the CLI
 
 ```console
-$ THONO_WALLPAPER_RESTORE_PATH=~/.thonobg ./thono -W <image>
+$ ./thono -W <image> ~/.thonobg
 Created wallpaper restore script '/home/<user>/.thonobg'
 $ ~/.thonobg
 ```
