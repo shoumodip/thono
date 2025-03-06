@@ -712,7 +712,7 @@ void app_loop(App *a) {
 
                 case Button4:
                     if (!a->select_on) {
-                        if (a->focus) {
+                        if (a->focus && !(e.xbutton.state & ShiftMask)) {
                             a->final.lens_size *= LENS_FACTOR;
                         } else {
                             app_zoom(a, ZOOM_FACTOR);
@@ -722,7 +722,7 @@ void app_loop(App *a) {
 
                 case Button5:
                     if (!a->select_on) {
-                        if (a->focus) {
+                        if (a->focus && !(e.xbutton.state & ShiftMask)) {
                             a->final.lens_size /= LENS_FACTOR;
                         } else {
                             app_zoom(a, 1.0 / ZOOM_FACTOR);
