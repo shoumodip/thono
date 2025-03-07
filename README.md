@@ -73,6 +73,12 @@ paths
 $ ./thono -R [PATHS]...
 ```
 
+Thono can load the directory of the currently viewing image as well
+
+| Action          | Description                                         |
+| --------------- | --------------------------------------------------- |
+| `d`             | Load the directory of the currently viewing image   |
+
 ## Wallpaper Setter Utility
 Thono can be used as a simple wallpaper setter utility
 

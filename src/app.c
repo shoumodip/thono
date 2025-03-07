@@ -102,7 +102,7 @@ static void app_save_image(App *a, Vec2 start, Vec2 size) {
 static void app_load_image(App *a, bool next_if_failed) {
     while (true) {
         Image *image = &a->images.data[a->current];
-        if (image->read) {
+        if (image->type == IMAGE_FILE_QUEUED) {
             const char *path = a->paths.data + image->path;
 
             int    w, h;
@@ -162,7 +162,7 @@ static void app_load_image(App *a, bool next_if_failed) {
             }
 
             stbi_image_free(data);
-            image->read = false;
+            image->type = IMAGE_FILE_LOADED;
         }
 
         glTexImage2D(
@@ -192,7 +192,20 @@ static int compare_images(const void *a, const void *b) {
     return strcmp(compare_context + ia->path, compare_context + ib->path);
 }
 
-static_assert(sizeof(size_t) == sizeof(const char *), "Use a proper computer bruh");
+static void app_add_file_to_queue(App *a, size_t path) {
+    const char *this = a->paths.data + path;
+    for (size_t i = 0; i < a->images.count; i++) {
+        if (a->images.data[i].type) {
+            const char *that = a->paths.data + a->images.data[i].path;
+            if (!strcmp(this, that)) {
+                return;
+            }
+        }
+    }
+
+    da_append(&a->images, ((Image) {.path = path, .type = IMAGE_FILE_QUEUED}));
+}
+
 static bool app_load_dir(App *a, const char *path, bool top) {
     errno = 0;
     DIR *dir = NULL;
@@ -224,7 +237,7 @@ static bool app_load_dir(App *a, const char *path, bool top) {
         if (e->d_type == DT_DIR) {
             app_load_dir(a, a->paths.data + copied, false);
         } else {
-            da_append(&a->images, ((Image) {.path = copied, .read = true}));
+            app_add_file_to_queue(a, copied);
         }
     }
 
@@ -262,7 +275,7 @@ static void app_load_path(App *a, const char *path) {
     const size_t copied = a->paths.count;
     da_append_cstr(&a->paths, path);
     da_append(&a->paths, '\0');
-    da_append(&a->images, ((Image) {.path = copied, .read = true}));
+    app_add_file_to_queue(a, copied);
 }
 
 void app_init(App *a) {
@@ -855,6 +868,21 @@ void app_loop(App *a) {
                             CurrentTime);
                     }
                     break;
+
+                case 'd':
+                    if (a->images.data[a->current].type) {
+                        const size_t save = a->temp.count;
+
+                        const char *fullpath = a->paths.data + a->images.data[a->current].path;
+                        da_append_cstr(&a->temp, fullpath);
+                        da_append(&a->temp, '\0');
+
+                        const char *dirpath = dirname(a->temp.data);
+                        app_load_dir(a, dirpath, true);
+
+                        a->temp.count = save;
+                    }
+                    break;
                 }
                 break;
             }
@@ -887,6 +915,7 @@ void app_exit(App *a) {
     }
     da_free(&a->images);
     da_free(&a->paths);
+    da_free(&a->temp);
 
     shader_free();
 

@@ -16,13 +16,19 @@ typedef struct {
     GLubyte a;
 } Pixel;
 
+typedef enum {
+    IMAGE_SCREENSHOT,
+    IMAGE_FILE_QUEUED,
+    IMAGE_FILE_LOADED,
+} ImageType;
+
 typedef struct {
     Pixel *data;
     size_t width;
     size_t height;
 
-    bool   read;
-    size_t path;
+    ImageType type;
+    size_t    path;
 } Image;
 
 typedef struct {
@@ -79,6 +85,8 @@ typedef struct {
 
     int  ipc_server_fd;
     Atom ipc_message_atom;
+
+    DynamicArray(char) temp;
 } App;
 
 void app_init(App *a);
