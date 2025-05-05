@@ -99,6 +99,18 @@ defer:
     return result;
 }
 
+static void print_quoted_path(FILE *f, const char *s) {
+    fputc('\'', f);
+    for (const char *p = s; *p; p++) {
+        if (*p == '\'') {
+            fputs("'\"'\"'", f);
+        } else {
+            fputc(*p, f);
+        }
+    }
+    fputc('\'', f);
+}
+
 static int wallpaper_restore(App *a, const char *image_path, const char *script_path) {
     int result = 0;
     DynamicArray(char) b = {0};
@@ -166,13 +178,11 @@ static int wallpaper_restore(App *a, const char *image_path, const char *script_
         return_defer(result);
     }
 
-    fprintf(
-        f,
-        "#!/bin/sh\n"
-        "%s -w %s\n",
-        b.data + program,
-        b.data + wallpaper);
-
+    fprintf(f, "#!/bin/sh\n");
+    print_quoted_path(f, b.data + program);
+    fprintf(f, " -w ");
+    print_quoted_path(f, b.data + wallpaper);
+    fprintf(f, "\n");
     fclose(f);
 
     if (chmod(b.data, 0755) == -1) {
