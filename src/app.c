@@ -327,7 +327,6 @@ static Window ipc_read_window(void) {
 }
 
 static void ipc_write_window(int lock, Window window) {
-    printf("Written window ID %ld to lock\n", window);
     dprintf(lock, "%lu\n", window);
     fsync(lock);
 }

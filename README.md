@@ -5,7 +5,8 @@ Image Utility in C
 Depends on Xlib and OpenGL
 
 ```console
-$ ./release.sh
+$ cc -o nob nob.c
+$ ./nob
 $ ./thono
 ```
 

@@ -3,10 +3,10 @@
 
 #include <stdbool.h>
 
-extern const char *image_fs;
-extern const char *image_vs;
+extern const char image_fs[];
+extern const char image_vs[];
 
-extern const char *overlay_fs;
-extern const char *overlay_vs;
+extern const char overlay_fs[];
+extern const char overlay_vs[];
 
 #endif // SHADER_H

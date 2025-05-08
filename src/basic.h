@@ -10,6 +10,7 @@
         goto defer;                                                                                \
     } while (0)
 
+// TODO: return a SV
 char *read_file(const char *path);
 
 typedef struct {
@@ -17,9 +18,10 @@ typedef struct {
     size_t size;
 } SV;
 
+#define SVFmt    "%.*s"
+#define SVArg(s) (int) (s).size, (s).data
+
 SV sv_from_cstr(char *data);
 SV sv_split(SV *s, char ch);
-
-bool wait_till_file_exists(const char *dirpath, const char *basepath, const char *fullpath);
 
 #endif // BASIC_H
