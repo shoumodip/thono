@@ -380,10 +380,6 @@ void app_open(App *a, const char **paths, size_t count) {
     app_zero(a);
     a->camera = a->final;
 
-    if (!shader_init()) {
-        exit(1);
-    }
-
     {
         int  x = 0, y = 0;
         uint mask;
@@ -876,7 +872,6 @@ void app_exit(App *a) {
     da_free(&a->temp);
 
     unlink(IPC_LOCK_FILE);
-    shader_free();
 }
 
 void app_wallpaper(App *a) {

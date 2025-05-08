@@ -15,4 +15,4 @@ fi
 .build/dump assets/overlay.fs overlay_fs > .build/overlay_fs.c
 .build/dump assets/overlay.vs overlay_vs > .build/overlay_vs.c
 
-cc -O3 -o thono -DRELEASE src/*.c .build/*.o -lm -lGL -lX11
+cc -O3 -o thono -DRELEASE src/*.c .build/*.c .build/*.o -lm -lGL -lX11

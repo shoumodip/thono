@@ -3,9 +3,6 @@
 
 #include <stdbool.h>
 
-bool shader_init(void);
-void shader_free(void);
-
 extern const char *image_fs;
 extern const char *image_vs;
 
