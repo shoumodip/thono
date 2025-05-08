@@ -7,7 +7,7 @@ Depends on Xlib and OpenGL
 ```console
 $ cc -o nob nob.c
 $ ./nob
-$ ./thono
+$ ./build/thono
 ```
 
 ## Usage
