@@ -83,7 +83,6 @@ typedef struct {
     Cursor select_cursor;
     size_t select_snap_pending;
 
-    int  ipc_server_fd;
     Atom ipc_message_atom;
 
     DynamicArray(char) temp;

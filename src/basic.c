@@ -1,9 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/inotify.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include "basic.h"
 
@@ -46,38 +43,21 @@ defer:
     return result;
 }
 
-bool wait_till_file_exists(const char *dirpath, const char *basepath, const char *fullpath) {
-    if (access(fullpath, F_OK) == 0) {
-        return true;
+SV sv_from_cstr(char *data) {
+    return (SV) {.data = data, .size = strlen(data)};
+}
+
+SV sv_split(SV *s, char ch) {
+    char *p = memchr(s->data, ch, s->size);
+    if (!p) {
+        const SV result = *s;
+        s->data += s->size;
+        s->size = 0;
+        return result;
     }
 
-    const int fd = inotify_init();
-    if (fd < 0) {
-        return false;
-    }
-
-    const int wd = inotify_add_watch(fd, dirpath, IN_CREATE);
-    if (wd < 0) {
-        return false;
-    }
-
-    static char buffer[(1024 * (sizeof(struct inotify_event) + 16))];
-    while (1) {
-        const long n = read(fd, buffer, sizeof(buffer));
-        if (n < 0) {
-            return false;
-        }
-
-        size_t i = 0;
-        while (i < n) {
-            struct inotify_event *e = (struct inotify_event *) &buffer[i];
-            if (e->len && e->mask & IN_CREATE) {
-                if (strcmp(e->name, basepath) == 0) {
-                    close(fd);
-                    return true;
-                }
-            }
-            i += sizeof(struct inotify_event) + e->len;
-        }
-    }
+    const SV result = (SV) {.data = s->data, .size = p - s->data};
+    s->data = p + 1;
+    s->size -= result.size + 1;
+    return result;
 }

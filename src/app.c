@@ -295,90 +295,86 @@ typedef struct {
     Vec2 uv;
 } Vertex;
 
-void app_open(App *a, const char **paths, size_t count) {
-    if (access(IPC_LOCK_PATH, F_OK) == 0) {
-        // Client lock
-        if (!count) {
-            XCloseDisplay(a->display);
-            exit(0);
-        }
+static int ipc_create_lock(void) {
+    const int fd = open(IPC_LOCK_FILE, O_CREAT | O_RDWR, 0666);
+    if (fd < 0) {
+        return -1;
+    }
 
-        static char dirpath_buffer[] = IPC_WINDOW_PATH;
-        const char *dirpath = dirname(dirpath_buffer);
+    if (lockf(fd, F_TLOCK, 0) < 0) {
+        return -1;
+    }
 
-        static char basepath_buffer[] = IPC_WINDOW_PATH;
-        const char *basepath = basename(basepath_buffer);
+    ftruncate(fd, 0);
+    return fd;
+}
 
-        if (!wait_till_file_exists(dirpath, basepath, IPC_WINDOW_PATH)) {
-            fprintf(stderr, "ERROR: Could not wait for creation of '%s'\n", IPC_WINDOW_PATH);
-            exit(1);
-        }
-
-        FILE *f = fopen(IPC_WINDOW_PATH, "r");
-        if (!f) {
-            fprintf(stderr, "ERROR: Failed to read window ID of main instance\n");
-            exit(1);
-        }
-
-        Window window;
-        if (fscanf(f, "%lu", &window) != 1) {
-            fprintf(stderr, "ERROR: Failed to read window ID of main instance\n");
+static Window ipc_read_window(void) {
+    for (size_t i = 0; i < IPC_READ_MAX_TRIES; i++) {
+        FILE *f = fopen(IPC_LOCK_FILE, "r");
+        if (f) {
+            Window window = 0;
+            if (fscanf(f, "%lu", &window) == 1 && window) {
+                fclose(f);
+                return window;
+            }
             fclose(f);
+        }
+        usleep(IPC_READ_DELAY_MS * 1000);
+    }
+
+    return 0;
+}
+
+static void ipc_write_window(int lock, Window window) {
+    printf("Written window ID %ld to lock\n", window);
+    dprintf(lock, "%lu\n", window);
+    fsync(lock);
+}
+
+void app_open(App *a, const char **paths, size_t count) {
+    const int lock = ipc_create_lock();
+    if (lock < 0) {
+        Window target = ipc_read_window();
+        if (!target) {
+            fprintf(stderr, "ERROR: Could not read window ID of main instance\n");
             exit(1);
         }
-        fclose(f);
 
-        const int client_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if (client_fd == -1) {
-            fprintf(stderr, "ERROR: Could not create socket\n");
+        char template[] = IPC_TEMPORARY_FILE;
+        const int fd = mkstemp(template);
+        if (fd < 0) {
+            fprintf(stderr, "ERROR: Could not create temporary message file\n");
             exit(1);
         }
 
-        struct sockaddr_un server_addr = {
-            .sun_family = AF_UNIX,
-        };
-        strcpy(server_addr.sun_path, IPC_SOCKET_PATH);
-
-        if (connect(client_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) == -1) {
-            fprintf(stderr, "ERROR: Could not connect to socket\n");
-            close(client_fd);
+        FILE *f = fdopen(fd, "w");
+        if (!f) {
+            fprintf(stderr, "ERROR: Could not create temporary message file\n");
+            close(fd);
+            unlink(template);
             exit(1);
         }
 
         for (size_t i = 0; i < count; i++) {
-            da_append_cstr(&a->paths, paths[i]);
-            da_append(&a->paths, '\0');
+            fprintf(f, "%s\n", paths[i]);
         }
+        fclose(f);
 
-        if (write(client_fd, a->paths.data, a->paths.count) == -1) {
-            fprintf(stderr, "ERROR: Could not write to socket\n");
-            da_free(&a->paths);
-            close(client_fd);
-            exit(1);
-        }
-        close(client_fd);
+        XEvent e = {0};
+        e.xclient.type = ClientMessage;
+        e.xclient.window = target;
+        e.xclient.message_type = XInternAtom(a->display, IPC_MESSAGE_LOAD, false);
+        e.xclient.format = 8;
 
-        XEvent event = {0};
-        event.xclient.type = ClientMessage;
-        event.xclient.message_type = XInternAtom(a->display, IPC_MESSAGE_LOAD, False);
-        event.xclient.format = 32;
-        event.xclient.window = window;
-        event.xclient.data.l[0] = (long) a->paths.count;
+        static_assert(sizeof(e.xclient.data.b) == strlen(IPC_TEMPORARY_FILE), "");
+        memcpy(e.xclient.data.b, template, sizeof(e.xclient.data.b));
 
-        XSendEvent(a->display, window, False, NoEventMask, &event);
+        XSendEvent(a->display, target, False, NoEventMask, &e);
         XFlush(a->display);
 
-        da_free(&a->paths);
         XCloseDisplay(a->display);
         exit(0);
-    } else {
-        // Server lock
-        const int fd = creat(IPC_LOCK_PATH, S_IRUSR | S_IWUSR);
-        if (fd < 0) {
-            fprintf(stderr, "ERROR: Could not create lock path\n");
-            exit(1);
-        }
-        close(fd);
     }
 
     app_zero(a);
@@ -443,6 +439,10 @@ void app_open(App *a, const char **paths, size_t count) {
         CWColormap | CWEventMask | CWOverrideRedirect | CWSaveUnder,
         &wa);
 
+    XStoreName(a->display, a->window, IPC_WINDOW_NAME);
+    ipc_write_window(lock, a->window);
+    a->ipc_message_atom = XInternAtom(a->display, IPC_MESSAGE_LOAD, False);
+
     a->glx_context = glXCreateContext(a->display, vi, NULL, GL_TRUE);
     glXMakeCurrent(a->display, a->window, a->glx_context);
 
@@ -458,44 +458,6 @@ void app_open(App *a, const char **paths, size_t count) {
         None,
         a->select_on ? a->select_cursor : None,
         CurrentTime);
-
-    // Server instance
-    {
-        a->ipc_server_fd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if (a->ipc_server_fd == -1) {
-            fprintf(stderr, "ERROR: Could not create socket\n");
-            exit(1);
-        }
-
-        unlink(IPC_SOCKET_PATH);
-
-        struct sockaddr_un server_addr = {
-            .sun_family = AF_UNIX,
-        };
-        strcpy(server_addr.sun_path, IPC_SOCKET_PATH);
-
-        if (bind(a->ipc_server_fd, (struct sockaddr *) &server_addr, sizeof(server_addr)) == -1) {
-            fprintf(stderr, "ERROR: Could not bind socket\n");
-            close(a->ipc_server_fd);
-            exit(1);
-        }
-
-        if (listen(a->ipc_server_fd, 5) == -1) {
-            fprintf(stderr, "ERROR: Could not listen to socket\n");
-            close(a->ipc_server_fd);
-            exit(1);
-        }
-
-        a->ipc_message_atom = XInternAtom(a->display, IPC_MESSAGE_LOAD, False);
-
-        FILE *f = fopen(IPC_WINDOW_PATH, "w");
-        if (!f) {
-            fprintf(stderr, "ERROR: Failed to save window ID of main instance\n");
-            exit(1);
-        }
-        fprintf(f, "%lu\n", a->window);
-        fclose(f);
-    }
 
     XGetInputFocus(a->display, &a->revert_window, &a->revert_return);
     XSetInputFocus(a->display, a->window, RevertToParent, CurrentTime);
@@ -654,34 +616,30 @@ void app_loop(App *a) {
 
             case ClientMessage:
                 if (!a->select_exit && e.xclient.message_type == a->ipc_message_atom) {
-                    const int client_fd = accept(a->ipc_server_fd, NULL, NULL);
-                    if (client_fd == -1) {
-                        fprintf(stderr, "ERROR: Could not accept client\n");
+                    char message_path[sizeof(IPC_TEMPORARY_FILE)] = {0};
+
+                    static_assert(sizeof(e.xclient.data.b) + 1 == sizeof(message_path), "");
+                    memcpy(message_path, e.xclient.data.b, sizeof(e.xclient.data.b));
+
+                    char *message_data = read_file(message_path);
+                    if (!message_data) {
+                        fprintf(stderr, "ERROR: Could not read temporary message file\n");
                         continue;
                     }
-                    const size_t size = (size_t) e.xclient.data.l[0];
+                    unlink(message_path);
 
-                    char *buffer = malloc(size);
-                    long  bytes = 0;
-                    while (bytes < size) {
-                        const long n = read(client_fd, buffer + bytes, size - bytes);
-                        if (n == -1) {
-                            fprintf(stderr, "ERROR: Could not read from socket\n");
-                            break;
+                    SV message = sv_from_cstr(message_data);
+                    while (message.size) {
+                        const SV line = sv_split(&message, '\n');
+                        if (line.size == 0) {
+                            continue;
                         }
-                        bytes += n;
-                    }
-                    close(client_fd);
 
-                    if (bytes == size) {
-                        for (const char *p = buffer; p < buffer + size; p += strlen(p) + 1) {
-                            app_load_path(a, p);
-                        }
-                    } else {
-                        fprintf(stderr, "ERROR: Incomplete message (%zu/%zu)\n", bytes, size);
+                        line.data[line.size] = '\0';
+                        app_load_path(a, line.data);
                     }
 
-                    free(buffer);
+                    free(message_data);
                 }
                 break;
 
@@ -917,12 +875,8 @@ void app_exit(App *a) {
     da_free(&a->paths);
     da_free(&a->temp);
 
+    unlink(IPC_LOCK_FILE);
     shader_free();
-
-    close(a->ipc_server_fd);
-    unlink(IPC_LOCK_PATH);
-    unlink(IPC_WINDOW_PATH);
-    unlink(IPC_SOCKET_PATH);
 }
 
 void app_wallpaper(App *a) {
